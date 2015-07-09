@@ -10,6 +10,7 @@ import base64
 import webapp2
 import jinja2
 import settings
+import hashlib
 
 from django.utils import simplejson as json
 
@@ -21,6 +22,7 @@ import datetime
 import random
 
 from google.appengine.api import urlfetch
+from google.appengine.api import memcache
 
 JINJA_ENVIRONMENT = jinja2.Environment(
     loader=jinja2.FileSystemLoader(os.path.dirname(__file__)),
@@ -387,6 +389,16 @@ class RefreshHandler(webapp2.RequestHandler):
 
             keyid = authid[:authid.index(':')]
             password = authid[authid.index(':')+1:]
+            
+            cacheurl = '/refresh?id=' + keyid + '&h=' + hashlib.sha256(password).hexdigest()
+
+            cached_res = memcache.get(cacheurl)
+            if cached_res != None:
+                logging.info('Serving cached response to: %s', authid[:authid.index(':')])
+                self.response.write(cached_res)
+                return
+
+
 
             # Find the entry
             entry = dbmodel.AuthToken.get_by_key_name(keyid)
@@ -445,8 +457,12 @@ class RefreshHandler(webapp2.RequestHandler):
             entry.blob = base64.b64encode(cipher)
             entry.put()
 
+            cached_res = json.dumps({'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype})
+            memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
+            logging.info('Caching response to: %s for %s', keyid, exp_secs - 10)
+
             # Write the result back to the client
-            self.response.write(json.dumps({'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype}))
+            self.response.write(cached_res)
 
         except:
             logging.exception('handler error for ' + servicetype)
