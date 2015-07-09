@@ -155,5 +155,11 @@ SERVICES = [
     }
 ]
 
+try:
+    from config import POST_CONFIG
+    POST_CONFIG(LOOKUP, SERVICES)
+except ImportError:
+    pass
+
 
 

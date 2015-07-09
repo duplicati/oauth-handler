@@ -35,3 +35,6 @@
 # https://hubic.com/home/browser/apps/
 #HC_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
 #HC_CLIENT_SECRET='XXXXXXXXXXXXXXXXXXXX'
+
+#def POST_CONFIG(lookup, services):
+#    pass
