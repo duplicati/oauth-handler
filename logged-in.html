@@ -28,7 +28,7 @@
         var countDown = 30;
         var v = $('#auth-token').text();
 
-        if (v == null || v == '')
+        if (v == null || v == '' || v == 'None')
           return;
 
         var recheck = function() {
