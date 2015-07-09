@@ -51,6 +51,15 @@ def find_provider_and_service(id):
     provider = providers[0]
     return provider, settings.LOOKUP[provider['type']]
 
+def find_service(id):
+    id = id.lower()
+    if settings.LOOKUP.has_key(id):
+        return settings.LOOKUP[id]
+
+    provider, service = find_provider_and_service(id)
+    return service
+
+
 
 class RedirectToLoginHandler(webapp2.RequestHandler):
     """Creates a state and redirects the user to the login page"""
@@ -386,6 +395,8 @@ class RefreshHandler(webapp2.RequestHandler):
                 self.response.set_status(404)
                 return
 
+            servicetype = entry.service
+
             # Decode
             data = base64.b64decode(entry.blob)
             resp = None
@@ -399,7 +410,7 @@ class RefreshHandler(webapp2.RequestHandler):
                 self.response.set_status(400)
                 return
 
-            provider, service = find_provider_and_service(entry.token_kind)
+            service = find_service(entry.service)
 
             # Issue a refresh request
             url = service['auth-url']
