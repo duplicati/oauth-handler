@@ -1,0 +1,4 @@
+cron:
+- description: weekly cleanout
+  url: /cleanup
+  schedule: every monday 00:00

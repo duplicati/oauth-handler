@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{longappname}}</title>
+
+    <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
+
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+    <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+
+    <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+      <script src="//oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+      <script src="//oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <script type="text/javascript">
+      $(document).ready(function() {
+
+        var data = [
+        {% for item in providers %}
+          {
+            'display': '{{item.display}}',
+            'id': '{{item.id}}'
+          },
+        {% endfor %}
+
+          null /*dummy*/
+        ];
+
+        for (var n in data)
+        {
+          if (n == null || data[n] == null)
+            continue;
+
+          var d = data[n];
+          if (d.id == '{{redir}}') {
+            window.location.href = $('#start-btn-' + d.id).attr('href');
+            $('#normal-login').hide();
+            $('#fast-login').show();
+            $('#fast-login-text').text('Redirecting to ' + d.display + ' for login ...');
+          }
+        }
+
+      });
+    </script>
+
+    <div class="well well-lg">
+    <div class="jumbotron">
+      <h1>{{longappname}}</h1>
+      <div id="normal-login">
+
+        {% if providers.length != 1 %}
+        <p>This service is intended for {{appname}} users that want to use one of the following OAuth enabled providers:</p>
+        <p>
+        {% for item in providers %}
+          <a href="{{item.servicelink}}" target="_blank">{{item.display}}</a>
+        {% endfor %}
+        </p>
+        <p> Click the button for the provider you wish to log in with:</p>
+        {% endif %}
+
+        <p>
+        {% for item in providers %}
+          <a id="start-btn-{{item.id}}" class="btn btn-primary btn-lg" role="button" href="{{item.authlink}}">{{item.display}} login</a>
+        {% endfor %}
+        </p>
+
+
+        {% for item in providers %}
+          {{item.notes|safe}}
+        {% endfor %}
+
+        <p style="font-size: small"><a href="/revoke">Click here if you need to revoke a previously established authid</a></p>
+      </div>
+      <div id="fast-login" style="display: none">
+        <p id="fast-login-text"></p>
+      </div>
+    </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{longappname}}</title>
+
+    <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
+
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+    <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+
+    <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+      <script src="//oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+      <script src="//oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <script type="text/javascript">
+      $(document).ready(function() {
+        var showDeauth = '{{deauthlink}}';
+        if (showDeauth == 'true')
+          $('#deauth-gdrive').show();
+
+        var countDown = 30;
+        var v = $('#auth-token').text();
+
+        if (v == null || v == '')
+          return;
+
+        var recheck = function() {
+          countDown--;
+          if (countDown > 0) {
+            $.ajax({
+              url: '/token-state',
+              dataType: 'json',
+              data: {'token': v}
+            })
+            .done(function(data) {
+              if (data.success) {
+                $('#auto-id').show();
+              } else {
+                setTimeout(recheck, 1000);
+              }
+            })
+            .fail(function() {
+              setTimeout(recheck, 1000);
+            });
+          }
+        };
+
+        setTimeout(recheck, 3000);
+      });
+    </script>
+
+    <div class="jumbotron">
+      <h1>{{appname}} for {{service}}</h1>
+      <p>Use these credentials for {{appname}}:</p>
+      
+      <p><pre id="user-id">{{authid}}</pre></p>
+      <p id="auto-id" style="display: none">The AuthID has been fetched, you can close this window now.</p>
+      <p id="auth-token" style="display: none">{{fetchtoken}}</p>
+      <p id="deauth-gdrive" style="display: none">Visit your <a href="https://security.google.com/settings/security/permissions">App Permissions</a> page to de-authorize {{appname}}</p>
+    </div>
+  </body>
+</html>
