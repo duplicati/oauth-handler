@@ -537,4 +537,4 @@ app = webapp2.WSGIApplication([
     ('/revoke', RevokeHandler),    
     ('/cleanup', CleanupHandler),    
     (r'/.*', IndexHandler)
-], debug=True)
+], debug=settings.TESTING)

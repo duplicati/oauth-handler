@@ -8,8 +8,9 @@
 #                                           #
 #############################################
 
+import os
 
-TESTING = False
+TESTING = os.environ.get('SERVER_SOFTWARE','').startswith('Development')
 
 APP_DOMAIN='change-me-in-config-py.appspot.com'
 APP_NAME = 'CHANGE-ME-IN-CONFIG.PY'
