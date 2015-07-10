@@ -219,7 +219,7 @@ class LoginHandler(webapp2.RequestHandler):
             if not resp.has_key('refresh_token'):
                 template_values = {
                     'service': display,
-                    'authid':  'Server error, you must de-authorize Duplicati',
+                    'authid':  'Server error, you must de-authorize ' + settings.APP_NAME,
                     'deauthlink': 'true',
                     'fetchtoken': ''
                 }
