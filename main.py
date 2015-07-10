@@ -394,7 +394,7 @@ class RefreshHandler(webapp2.RequestHandler):
 
             cached_res = memcache.get(cacheurl)
             if cached_res != None:
-                logging.info('Serving cached response to: %s', authid[:authid.index(':')])
+                logging.info('Serving cached response to: %s', keyid)
                 self.response.write(cached_res)
                 return
 
@@ -457,7 +457,7 @@ class RefreshHandler(webapp2.RequestHandler):
 
             cached_res = json.dumps({'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype})
             memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
-            logging.info('Caching response to: %s for %s', keyid, exp_secs - 10)
+            logging.info('Caching response to: %s for %s secs, service: %s', keyid, exp_secs - 10, servicetype)
 
             # Write the result back to the client
             self.response.write(cached_res)
