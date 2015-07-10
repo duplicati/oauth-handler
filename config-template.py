@@ -18,6 +18,11 @@
 #if TESTING:
 #    OAUTH_CALLBACK_URI = 'http://localhost:12080/logged-in'
 
+# If you need to modify the lookup table and service list,
+# add this method
+#def POST_CONFIG(lookup, services):
+#    pass
+
 
 ######## SECRETS AREA ##########
 
@@ -36,5 +41,3 @@
 #HC_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
 #HC_CLIENT_SECRET='XXXXXXXXXXXXXXXXXXXX'
 
-#def POST_CONFIG(lookup, services):
-#    pass
