@@ -379,12 +379,12 @@ class RefreshHandler(webapp2.RequestHandler):
 
             if authid == None or authid == '':
                 self.response.headers['X-Reason'] = 'No authid in query'
-                self.response.set_status(400)
+                self.response.set_status(400, 'No authid in query')
                 return
 
             if authid.find(':') <= 0:
                 self.response.headers['X-Reason'] = 'Invalid authid in query'
-                self.response.set_status(400)
+                self.response.set_status(400, 'Invalid authid in query')
                 return
 
             keyid = authid[:authid.index(':')]
@@ -398,13 +398,11 @@ class RefreshHandler(webapp2.RequestHandler):
                 self.response.write(cached_res)
                 return
 
-
-
             # Find the entry
             entry = dbmodel.AuthToken.get_by_key_name(keyid)
             if entry == None:
-                self.response.headers['X-Reason'] = 'No such user'
-                self.response.set_status(404)
+                self.response.headers['X-Reason'] = 'No such key'
+                self.response.set_status(404, 'No such key')
                 return
 
             servicetype = entry.service
@@ -419,7 +417,7 @@ class RefreshHandler(webapp2.RequestHandler):
             except:
                 logging.exception('decrypt error')
                 self.response.headers['X-Reason'] = 'Invalid authid password'
-                self.response.set_status(400)
+                self.response.set_status(400, 'Invalid authid password')
                 return
 
             service = find_service(entry.service)
@@ -467,7 +465,7 @@ class RefreshHandler(webapp2.RequestHandler):
         except:
             logging.exception('handler error for ' + servicetype)
             self.response.headers['X-Reason'] = 'Server error'
-            self.response.set_status(500)
+            self.response.set_status(500, 'Server error')
 
     def post(self):
         self.get()        
