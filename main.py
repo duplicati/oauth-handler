@@ -276,6 +276,8 @@ class LoginHandler(webapp2.RequestHandler):
             self.response.write(template.render(template_values))
             statetoken.delete()
 
+            logging.info('Created new authid %s for service %s', keyid, provider['id'])
+
         except:
             logging.exception('handler error for ' + display)
 
@@ -410,10 +412,15 @@ class RefreshHandler(webapp2.RequestHandler):
             cacheurl = '/refresh?id=' + keyid + '&h=' + hashlib.sha256(password).hexdigest()
 
             cached_res = memcache.get(cacheurl)
-            if cached_res != None:
-                logging.info('Serving cached response to: %s', keyid)
-                self.response.write(cached_res)
-                return
+            if cached_res != None and type(cached_res) != type(''):
+                exp_secs = (int)((cached_res['expires'] - datetime.datetime.utcnow()).total_seconds())
+
+                if exp_secs > 30:
+                    logging.info('Serving cached response to: %s, expires in %s secs', keyid, exp_secs)
+                    self.response.write(json.dumps({'access_token': cached_res['access_token'], 'expires': exp_secs, 'type': cached_res['type']}))
+                    return
+                else:
+                    logging.info('Cached response to: %s is invalid because it expires in %s', keyid, exp_secs)
 
             # Find the entry
             entry = dbmodel.AuthToken.get_by_key_name(keyid)
@@ -472,12 +479,13 @@ class RefreshHandler(webapp2.RequestHandler):
             entry.blob = base64.b64encode(cipher)
             entry.put()
 
-            cached_res = json.dumps({'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype})
+            cached_res = {'access_token': resp['access_token'], 'expires': entry.expires, 'type': servicetype}
+
             memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
             logging.info('Caching response to: %s for %s secs, service: %s', keyid, exp_secs - 10, servicetype)
 
             # Write the result back to the client
-            self.response.write(cached_res)
+            self.response.write(json.dumps({'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype}))
 
         except:
             logging.exception('handler error for ' + servicetype)
