@@ -14,6 +14,10 @@
 # Callback URI for OAuth
 #OAUTH_CALLBACK_URI = 'https://' + APP_DOMAIN + '/logged-in'
 
+# Sets a limit for how many requests can be performed in
+# an hour for a single keyid+ip pair
+#RATE_LIMIT = 4
+
 # Conditional setup example:
 #if TESTING:
 #    OAUTH_CALLBACK_URI = 'http://localhost:12080/logged-in'

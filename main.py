@@ -390,6 +390,23 @@ class RefreshHandler(webapp2.RequestHandler):
             keyid = authid[:authid.index(':')]
             password = authid[authid.index(':')+1:]
             
+
+            if settings.RATE_LIMIT > 0:
+                
+                ratelimiturl = '/ratelimit?id=' + keyid + '&adr=' + self.request.remote_addr
+                ratelimit = memcache.get(ratelimiturl)
+
+                if ratelimit == None:
+                    memcache.add(key=ratelimiturl, value=1, time=60*60)
+                elif ratelimit > settings.RATE_LIMIT:
+                    logging.info('Rate limit response to: %s', keyid)
+                    self.response.headers['X-Reason'] = 'Too many request for this key, wait 60 minutes'
+                    self.response.set_status(503, 'Too many request for this key, wait 60 minutes')
+                    return
+                else:
+                    memcache.incr(ratelimiturl)
+
+
             cacheurl = '/refresh?id=' + keyid + '&h=' + hashlib.sha256(password).hexdigest()
 
             cached_res = memcache.get(cacheurl)

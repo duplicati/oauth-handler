@@ -21,7 +21,7 @@ GD_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
 GD_CLIENT_SECRET='XXXXXXXXXXXXXXXXXXXX'
 HC_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
 HC_CLIENT_SECRET='XXXXXXXXXXXXXXXXXXXX'
-
+RATE_LIMIT=0
 
 try:
     from config import WL_CLIENT_ID
@@ -53,6 +53,11 @@ except ImportError:
 
 try:
     from config import SERVICE_DISPLAYNAME
+except ImportError:
+    pass
+
+try:
+    from config import RATE_LIMIT
 except ImportError:
     pass
 
