@@ -21,6 +21,8 @@ GD_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
 GD_CLIENT_SECRET='XXXXXXXXXXXXXXXXXXXX'
 HC_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
 HC_CLIENT_SECRET='XXXXXXXXXXXXXXXXXXXX'
+AMZ_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
+AMZ_CLIENT_SECRET='XXXXXXXXXXXXXXXXXXXX'
 RATE_LIMIT=0
 
 try:
@@ -38,6 +40,12 @@ except ImportError:
 try:
     from config import HC_CLIENT_ID
     from config import HC_CLIENT_SECRET
+except ImportError:
+    pass
+
+try:
+    from config import AMZ_CLIENT_ID
+    from config import AMZ_CLIENT_SECRET
 except ImportError:
     pass
 
@@ -86,6 +94,9 @@ HC_REDIRECT_URI=OAUTH_CALLBACK_URI
 HC_AUTH_URL='https://api.hubic.com/oauth/token/'
 HC_LOGIN_URL='https://api.hubic.com/oauth/auth/'
 
+AMZ_REDIRECT_URI=OAUTH_CALLBACK_URI
+AMZ_AUTH_URL='https://api.amazon.com/auth/o2/token'
+AMZ_LOGIN_URL='https://www.amazon.com/ap/oa'
 
 
 
@@ -115,7 +126,16 @@ LOOKUP = {
         'redirect-uri': HC_REDIRECT_URI,
         'auth-url': HC_AUTH_URL,
         'login-url': HC_LOGIN_URL
-    }
+    },
+
+    'amz' : {
+        'display': 'Amazon',
+        'client-id': AMZ_CLIENT_ID,
+        'client-secret': AMZ_CLIENT_SECRET,
+        'redirect-uri': AMZ_REDIRECT_URI,
+        'auth-url': AMZ_AUTH_URL,
+        'login-url': AMZ_LOGIN_URL    
+    } 
 }
 
 SERVICES = [
@@ -157,6 +177,13 @@ SERVICES = [
         'id': 'hubic',
         'scope': 'credentials.r',
         'servicelink': 'https://hubic.com'
+    },
+    {
+        'display': 'Amazon Cloud Drive',
+        'type': 'amz',
+        'id': 'amzcd',
+        'scope': 'clouddrive:read_other clouddrive:write',
+        'servicelink': 'https://www.amazon.com/clouddrive/home'
     }
 ]
 
