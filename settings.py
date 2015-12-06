@@ -23,6 +23,9 @@ HC_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
 HC_CLIENT_SECRET='XXXXXXXXXXXXXXXXXXXX'
 AMZ_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
 AMZ_CLIENT_SECRET='XXXXXXXXXXXXXXXXXXXX'
+BOX_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
+BOX_CLIENT_SECRET='XXXXXXXXXXXXXXXXXXXX'
+
 RATE_LIMIT=0
 
 try:
@@ -46,6 +49,12 @@ except ImportError:
 try:
     from config import AMZ_CLIENT_ID
     from config import AMZ_CLIENT_SECRET
+except ImportError:
+    pass
+
+try:
+    from config import BOX_CLIENT_ID
+    from config import BOX_CLIENT_SECRET
 except ImportError:
     pass
 
@@ -98,6 +107,9 @@ AMZ_REDIRECT_URI=OAUTH_CALLBACK_URI
 AMZ_AUTH_URL='https://api.amazon.com/auth/o2/token'
 AMZ_LOGIN_URL='https://www.amazon.com/ap/oa'
 
+BOX_REDIRECT_URI=OAUTH_CALLBACK_URI
+BOX_AUTH_URL='https://api.box.com/oauth2/token'
+BOX_LOGIN_URL='https://app.box.com/api/oauth2/authorize'
 
 
 LOOKUP = {
@@ -135,6 +147,15 @@ LOOKUP = {
         'redirect-uri': AMZ_REDIRECT_URI,
         'auth-url': AMZ_AUTH_URL,
         'login-url': AMZ_LOGIN_URL    
+    },
+
+    'box' : {
+        'display': 'Box.com',
+        'client-id': BOX_CLIENT_ID,
+        'client-secret': BOX_CLIENT_SECRET,
+        'redirect-uri': BOX_REDIRECT_URI,
+        'auth-url': BOX_AUTH_URL,
+        'login-url': BOX_LOGIN_URL    
     } 
 }
 
@@ -184,6 +205,13 @@ SERVICES = [
         'id': 'amzcd',
         'scope': 'clouddrive:read_other clouddrive:write',
         'servicelink': 'https://www.amazon.com/clouddrive/home'
+    },
+    {
+        'display': 'Box.com',
+        'type': 'box',
+        'id': 'box.com',
+        'scope': 'root_readwrite',
+        'servicelink': 'https://www.box.com/pricing/personal/'
     }
 ]
 
