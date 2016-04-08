@@ -25,6 +25,8 @@ AMZ_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
 AMZ_CLIENT_SECRET='XXXXXXXXXXXXXXXXXXXX'
 BOX_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
 BOX_CLIENT_SECRET='XXXXXXXXXXXXXXXXXXXX'
+DROPBOX_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
+DROPBOX_CLIENT_SECRET='XXXXXXXXXXXXXXXXXXXX'
 
 RATE_LIMIT=0
 
@@ -55,6 +57,12 @@ except ImportError:
 try:
     from config import BOX_CLIENT_ID
     from config import BOX_CLIENT_SECRET
+except ImportError:
+    pass
+
+try:
+    from config import DROPBOX_CLIENT_ID
+    from config import DROPBOX_CLIENT_SECRET
 except ImportError:
     pass
 
@@ -111,6 +119,10 @@ BOX_REDIRECT_URI=OAUTH_CALLBACK_URI
 BOX_AUTH_URL='https://api.box.com/oauth2/token'
 BOX_LOGIN_URL='https://app.box.com/api/oauth2/authorize'
 
+DROPBOX_REDIRECT_URI=OAUTH_CALLBACK_URI
+DROPBOX_AUTH_URL='https://api.dropboxapi.com/1/oauth2/token'
+DROPBOX_LOGIN_URL='https://www.dropbox.com/1/oauth2/authorize'
+
 
 LOOKUP = {
     'wl' : {
@@ -156,6 +168,14 @@ LOOKUP = {
         'redirect-uri': BOX_REDIRECT_URI,
         'auth-url': BOX_AUTH_URL,
         'login-url': BOX_LOGIN_URL    
+    } 
+    'dropbox' : {
+        'display': 'DropBox',
+        'client-id': DROPBOX_CLIENT_ID,
+        'client-secret': DROPBOX_CLIENT_SECRET,
+        'redirect-uri': DROPBOX_REDIRECT_URI,
+        'auth-url': DROPBOX_AUTH_URL,
+        'login-url': DROPBOX_LOGIN_URL    
     } 
 }
 
@@ -212,6 +232,13 @@ SERVICES = [
         'id': 'box.com',
         'scope': 'root_readwrite',
         'servicelink': 'https://www.box.com/pricing/personal/'
+    },
+    {
+        'display': 'DropBox',
+        'type': 'dropbox',
+        'id': 'dropbox',
+        'scope': 'root_readwrite',
+        'servicelink': 'https://dropbox.com'
     }
 ]
 
