@@ -557,13 +557,13 @@ class RefreshHandler(webapp2.RequestHandler):
             entry.blob = base64.b64encode(cipher)
             entry.put()
 
-            cached_res = {'access_token': resp['access_token'], 'expires': entry.expires, 'type': servicetype, 'v2-authid': 'v2:' + entry.service + ':' + rt}
+            cached_res = {'access_token': resp['access_token'], 'expires': entry.expires, 'type': servicetype}
 
             memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
             logging.info('Caching response to: %s for %s secs, service: %s', keyid, exp_secs - 10, servicetype)
 
             # Write the result back to the client
-            self.response.write(json.dumps(cached_res))
+            self.response.write(json.dumps({'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype, 'v2-authid': 'v2:' + entry.service + ':' + rt}))
 
         except:
             logging.exception('handler error for ' + servicetype)
@@ -681,6 +681,9 @@ class RevokedHandler(webapp2.RequestHandler):
 
             keyid = authid[:authid.index(':')]
             password = authid[authid.index(':')+1:]
+
+            if keyid == 'v2':
+                return 'Error: The token must be revoked from the service provider. You can de-authorize the application on the storage providers website.'
 
             entry = dbmodel.AuthToken.get_by_key_name(keyid)
             if entry == None:
