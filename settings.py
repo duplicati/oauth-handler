@@ -168,7 +168,7 @@ LOOKUP = {
         'redirect-uri': BOX_REDIRECT_URI,
         'auth-url': BOX_AUTH_URL,
         'login-url': BOX_LOGIN_URL    
-    } 
+    },
     'dropbox' : {
         'display': 'DropBox',
         'client-id': DROPBOX_CLIENT_ID,
