@@ -276,7 +276,11 @@ class LoginHandler(webapp2.RequestHandler):
             else:
                 user_id = "N/A"
 
-            exp_secs = int(resp["expires_in"])
+            exp_secs = 1800 # 30 min guess
+            try:
+                exp_secs = int(resp["expires_in"])
+            except:
+                pass
 
             # Create a random password and encrypt the response
             # This ensures that a hostile takeover will not get access
