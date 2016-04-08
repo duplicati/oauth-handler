@@ -175,7 +175,9 @@ LOOKUP = {
         'client-secret': DROPBOX_CLIENT_SECRET,
         'redirect-uri': DROPBOX_REDIRECT_URI,
         'auth-url': DROPBOX_AUTH_URL,
-        'login-url': DROPBOX_LOGIN_URL    
+        'login-url': DROPBOX_LOGIN_URL,
+        'no-state-for-token-request': True,
+        'no-refresh-tokens': True
     } 
 }
 
@@ -194,7 +196,8 @@ SERVICES = [
         'id': 'googledrive',
         'scope': 'https://www.googleapis.com/auth/drive.file',
         'extraurl': 'access_type=offline&approval_prompt=force',
-        'servicelink': 'https://drive.google.com'
+        'servicelink': 'https://drive.google.com',
+        'deauthlink': 'https://security.google.com/settings/security/permissions'
     },
     {
         'display': 'Google Docs',
@@ -202,7 +205,8 @@ SERVICES = [
         'id': 'googledocs',
         'scope': 'https://www.googleapis.com/auth/drive',
         'extraurl': 'access_type=offline&approval_prompt=force',
-        'servicelink': 'https://drive.google.com'
+        'servicelink': 'https://drive.google.com',
+        'deauthlink': 'https://security.google.com/settings/security/permissions'
     },
     {
         'display': 'Google Cloud Storage',
@@ -210,7 +214,8 @@ SERVICES = [
         'id': 'gcs',
         'scope': 'https://www.googleapis.com/auth/devstorage.read_write',
         'extraurl': 'access_type=offline&approval_prompt=force',
-        'servicelink': 'https://cloud.google.com/storage/'
+        'servicelink': 'https://cloud.google.com/storage/',
+        'deauthlink': 'https://security.google.com/settings/security/permissions'
     },
     {
         'display': 'HubiC',
@@ -237,7 +242,7 @@ SERVICES = [
         'display': 'DropBox',
         'type': 'dropbox',
         'id': 'dropbox',
-        'scope': 'root_readwrite',
+        'scope': '',
         'servicelink': 'https://dropbox.com'
     }
 ]

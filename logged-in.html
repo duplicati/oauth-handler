@@ -21,7 +21,7 @@
   <body>
     <script type="text/javascript">
       $(document).ready(function() {
-        var showDeauth = '{{deauthlink}}';
+        var showDeauth = '{{showdeauthlink}}';
         if (showDeauth == 'true')
           $('#deauth-gdrive').show();
 
@@ -63,7 +63,7 @@
       <p><pre id="user-id">{{authid}}</pre></p>
       <p id="auto-id" style="display: none">The AuthID has been fetched, you can close this window now.</p>
       <p id="auth-token" style="display: none">{{fetchtoken}}</p>
-      <p id="deauth-gdrive" style="display: none">Visit your <a href="https://security.google.com/settings/security/permissions">App Permissions</a> page to de-authorize {{appname}}</p>
+      <p id="deauth-gdrive" style="display: none">Visit your <a href="{{deauthlink}}">App Permissions</a> page to de-authorize {{appname}}</p>
     </div>
   </body>
 </html>

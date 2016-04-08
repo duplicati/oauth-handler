@@ -121,6 +121,9 @@ class IndexHandler(webapp2.RequestHandler):
             if service['client-id'] == None or service['client-id'][0:8] == 'XXXXXXXX':
                 continue
             
+            if filtertype == None and n.has_key('hidden') and n['hidden']:
+                continue
+
             redir_uri = service['redirect-uri']
 
             link = '/login?id=' + n['id']
@@ -186,16 +189,23 @@ class LoginHandler(webapp2.RequestHandler):
             # Some services are slow...
             urlfetch.set_default_fetch_deadline(20)
 
-
             # With the returned code, request a refresh and access token
             url = service['auth-url']
-            data = urllib.urlencode({'client_id' : service['client-id'],
-                                     'redirect_uri'  : redir_uri,
-                                     'client_secret': service['client-secret'],
-                                     'code': code,
-                                     'state': state,
-                                     'grant_type': 'authorization_code'
-                                     })
+
+            request_params = {
+                'client_id' : service['client-id'],
+                 'redirect_uri'  : redir_uri,
+                 'client_secret': service['client-secret'],
+                 'state': state,
+                 'code': code,
+                 'grant_type': 'authorization_code'
+             }
+
+            # Some services do not allow the state to be passed
+            if service.has_key('no-state-for-token-request') and service['no-state-for-token-request']:
+                del request_params['state']
+
+            data = urllib.urlencode(request_params)
 
             headers = {'Content-Type': 'application/x-www-form-urlencoded'}
 
@@ -217,17 +227,44 @@ class LoginHandler(webapp2.RequestHandler):
 
             # This happens in some cases with Google's OAuth
             if not resp.has_key('refresh_token'):
-                template_values = {
-                    'service': display,
-                    'authid':  'Server error, you must de-authorize ' + settings.APP_NAME,
-                    'deauthlink': 'true',
-                    'fetchtoken': ''
-                }
 
-                template = JINJA_ENVIRONMENT.get_template('logged-in.html')
-                self.response.write(template.render(template_values))
-                statetoken.delete()
-                return        
+                if provider.has_key('deauthlink'):
+                    template_values = {
+                        'service': display,
+                        'authid':  'Server error, you must de-authorize ' + settings.APP_NAME,
+                        'showdeauthlink': 'true',
+                        'deauthlink': provider['deauthlink'],
+                        'fetchtoken': ''
+                    }
+
+                    template = JINJA_ENVIRONMENT.get_template('logged-in.html')
+                    self.response.write(template.render(template_values))
+                    statetoken.delete()
+                    return
+
+                elif service.has_key('no-refresh-tokens') and service['no-refresh-tokens']:
+                    # If this is a service that does not use refresh tokens,
+                    # we do not store the token, but just return it raw to the user
+                    dbmodel.update_fetch_token(statetoken.fetchtoken, resp['access_token'])
+
+                    # Report results to the user
+                    template_values = {
+                        'service': display,
+                        'appname': settings.APP_NAME,
+                        'longappname': settings.SERVICE_DISPLAYNAME,
+                        'authid':  resp['access_token'],
+                        'fetchtoken': statetoken.fetchtoken
+                    }
+
+                    template = JINJA_ENVIRONMENT.get_template('logged-in.html')
+                    self.response.write(template.render(template_values))
+                    statetoken.delete()
+
+                    logging.info('Returned access token for service %s', provider['id'])
+                    return
+
+                else:
+                    raise Exception('No refresh token found, try to de-authorize the application with the provider')
 
 
             # We store the ID if we get it back
