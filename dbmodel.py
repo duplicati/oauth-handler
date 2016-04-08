@@ -20,6 +20,7 @@ class StateToken(db.Model):
     service = db.StringProperty(required=True)
     expires = db.DateTimeProperty(required=True)
     fetchtoken = db.StringProperty(required=False)
+    version = db.IntegerProperty(required=False)
 
 
 @db.transactional(xg=True)
@@ -53,11 +54,18 @@ def insert_new_authtoken(keyid, user_id, blob, expires, service):
         return None
 
 @db.transactional(xg=True)
-def insert_new_statetoken(token, service, fetchtoken):
+def insert_new_statetoken(token, service, fetchtoken, version):
     entry = StateToken.get_by_key_name(token)
     if entry == None:
         
-        entry = StateToken(key_name=token, service=service, fetchtoken=fetchtoken, expires=datetime.datetime.utcnow() + datetime.timedelta(minutes=5))
+        tokenversion = None
+        try: 
+            tokenversion = int(version)
+        except:
+            pass
+
+
+        entry = StateToken(key_name=token, service=service, fetchtoken=fetchtoken, expires=datetime.datetime.utcnow() + datetime.timedelta(minutes=5), version=tokenversion)
         entry.put()
 
         return entry

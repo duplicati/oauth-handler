@@ -15,6 +15,8 @@ TESTING = os.environ.get('SERVER_SOFTWARE','').startswith('Development')
 APP_DOMAIN='change-me-in-config-py.appspot.com'
 APP_NAME = 'CHANGE-ME-IN-CONFIG.PY'
 SERVICE_DISPLAYNAME = APP_NAME + ' OAuth Handler'
+DEFAULT_TOKEN_VERSION = 1
+
 WL_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
 WL_CLIENT_SECRET='XXXXXXXXXXXXXXXXXXXX'
 GD_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
@@ -88,6 +90,11 @@ except ImportError:
 
 try:
     from config import TESTING
+except ImportError:
+    pass
+
+try:
+    from config import DEFAULT_TOKEN_VERSION
 except ImportError:
     pass
 

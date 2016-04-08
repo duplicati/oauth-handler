@@ -74,7 +74,7 @@ class RedirectToLoginHandler(webapp2.RequestHandler):
             stateentry = None
             while stateentry == None:
                 statetoken = '%030x' % random.randrange(16**32)
-                stateentry = dbmodel.insert_new_statetoken(statetoken, provider['id'], self.request.get('token', None))
+                stateentry = dbmodel.insert_new_statetoken(statetoken, provider['id'], self.request.get('token', None), self.request.get('tokenversion', None))
 
             link = service['login-url']
             link += '?client_id=' + service['client-id']
@@ -109,6 +109,15 @@ class IndexHandler(webapp2.RequestHandler):
 
         filtertype = self.request.get('type', None)
 
+        tokenversion = settings.DEFAULT_TOKEN_VERSION
+        
+        try:
+            if self.request.get('tokenversion') != None:
+                tokenversion = int(self.request.get('tokenversion'))
+        except:
+            pass
+
+
         templateitems = []
         for n in settings.SERVICES:
             service = settings.LOOKUP[n['type']]
@@ -130,6 +139,9 @@ class IndexHandler(webapp2.RequestHandler):
             if self.request.get('token', None) != None:
                 link += '&token=' + self.request.get('token')
 
+            if tokenversion != None:
+                link += '&tokenversion=' + str(tokenversion)
+
             notes = ''
             if n.has_key('notes'):
                 notes = n['notes']
@@ -143,7 +155,7 @@ class IndexHandler(webapp2.RequestHandler):
             })
 
         template = JINJA_ENVIRONMENT.get_template('index.html')
-        self.response.write(template.render({'redir': self.request.get('redirect', None), 'appname': settings.APP_NAME, 'longappname': settings.SERVICE_DISPLAYNAME, 'providers': templateitems}))
+        self.response.write(template.render({'redir': self.request.get('redirect', None), 'appname': settings.APP_NAME, 'longappname': settings.SERVICE_DISPLAYNAME, 'providers': templateitems, 'tokenversion': tokenversion}))
 
 
 class LoginHandler(webapp2.RequestHandler):
@@ -266,9 +278,28 @@ class LoginHandler(webapp2.RequestHandler):
                 else:
                     raise Exception('No refresh token found, try to de-authorize the application with the provider')
 
+            # v2 tokens are just the provider name and the refresh token
+            # and they have no stored state on the server
+            if statetoken.version == 2:
+                authid = 'v2:' + statetoken.service + ':' + resp['refresh_token']
+                dbmodel.update_fetch_token(statetoken.fetchtoken, authid)
 
+                # Report results to the user
+                template_values = {
+                    'service': display,
+                    'appname': settings.APP_NAME,
+                    'longappname': settings.SERVICE_DISPLAYNAME,
+                    'authid':  authid,
+                    'fetchtoken': statetoken.fetchtoken
+                }
 
+                template = JINJA_ENVIRONMENT.get_template('logged-in.html')
+                self.response.write(template.render(template_values))
+                statetoken.delete()
 
+                logging.info('Returned refresh token for service %s', provider['id'])
+                return
+                
 
             # We store the ID if we get it back
             if resp.has_key("user_id"):
@@ -435,7 +466,10 @@ class RefreshHandler(webapp2.RequestHandler):
 
             keyid = authid[:authid.index(':')]
             password = authid[authid.index(':')+1:]
-            
+
+            if keyid == 'v2':
+                self.handle_v2(password)
+                return
 
             if settings.RATE_LIMIT > 0:
                 
@@ -523,13 +557,13 @@ class RefreshHandler(webapp2.RequestHandler):
             entry.blob = base64.b64encode(cipher)
             entry.put()
 
-            cached_res = {'access_token': resp['access_token'], 'expires': entry.expires, 'type': servicetype}
+            cached_res = {'access_token': resp['access_token'], 'expires': entry.expires, 'type': servicetype, 'v2-authid': 'v2:' + entry.service + ':' + rt}
 
             memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
             logging.info('Caching response to: %s for %s secs, service: %s', keyid, exp_secs - 10, servicetype)
 
             # Write the result back to the client
-            self.response.write(json.dumps({'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype}))
+            self.response.write(json.dumps(cached_res))
 
         except:
             logging.exception('handler error for ' + servicetype)
@@ -537,7 +571,92 @@ class RefreshHandler(webapp2.RequestHandler):
             self.response.set_status(500, 'Server error')
 
     def post(self):
-        self.get()        
+        self.get()
+
+    """
+    Handler that retrieves a new access token,
+    from the provided refresh token
+    """
+    def handle_v2(self, inputfragment):
+        servicetype = 'Unknown'
+        try:
+            if inputfragment.find(':') <= 0:
+                self.response.headers['X-Reason'] = 'Invalid authid in query'
+                self.response.set_status(400, 'Invalid authid in query')
+                return
+
+            servicetype = inputfragment[:inputfragment.index(':')]
+            refresh_token = inputfragment[inputfragment.index(':')+1:]
+
+            service = find_service(servicetype)
+            if service == None:
+                raise Exception('No such service')
+
+            if refresh_token == None or len(refresh_token.strip()) == 0:
+                raise Exception('No token provided')
+
+            tokenhash = hashlib.md5(refresh_token).hexdigest()
+
+            if settings.RATE_LIMIT > 0:
+                
+                ratelimiturl = '/ratelimit?id=' + tokenhash + '&adr=' + self.request.remote_addr
+                ratelimit = memcache.get(ratelimiturl)
+
+                if ratelimit == None:
+                    memcache.add(key=ratelimiturl, value=1, time=60*60)
+                elif ratelimit > settings.RATE_LIMIT:
+                    logging.info('Rate limit response to: %s', tokenhash)
+                    self.response.headers['X-Reason'] = 'Too many request for this key, wait 60 minutes'
+                    self.response.set_status(503, 'Too many request for this key, wait 60 minutes')
+                    return
+                else:
+                    memcache.incr(ratelimiturl)
+
+
+            cacheurl = '/v2/refresh?id=' + tokenhash
+
+            cached_res = memcache.get(cacheurl)
+            if cached_res != None and type(cached_res) != type(''):
+                exp_secs = (int)((cached_res['expires'] - datetime.datetime.utcnow()).total_seconds())
+
+                if exp_secs > 30:
+                    logging.info('Serving cached response to: %s, expires in %s secs', keyid, exp_secs)
+                    self.response.write(json.dumps({'access_token': cached_res['access_token'], 'expires': exp_secs, 'type': cached_res['type']}))
+                    return
+                else:
+                    logging.info('Cached response to: %s is invalid because it expires in %s', keyid, exp_secs)
+
+
+            url = service['auth-url']
+            data = urllib.urlencode({'client_id' : service['client-id'],
+                                     'redirect_uri'  : service['redirect-uri'],
+                                     'client_secret': service['client-secret'],
+                                     'grant_type': 'refresh_token',
+                                     'refresh_token': refresh_token
+                                     })
+
+            urlfetch.set_default_fetch_deadline(20)
+
+            req = urllib2.Request(url, data, {'Content-Type': 'application/x-www-form-urlencoded'})
+            f = urllib2.urlopen(req)
+            content = f.read()
+            f.close()
+
+            resp = json.loads(content)
+            exp_secs = int(resp["expires_in"])
+
+            cached_res = {'access_token': resp['access_token'], 'expires': entry.expires, 'type': servicetype}
+
+            memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
+            logging.info('Caching response to: %s for %s secs, service: %s', keyid, exp_secs - 10, servicetype)
+
+            # Write the result back to the client
+            self.response.write(json.dumps({'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype}))            
+            
+        except:
+            logging.exception('handler error for ' + servicetype)
+            self.response.headers['X-Reason'] = 'Server error'
+            self.response.set_status(500, 'Server error')    
 
 class RevokeHandler(webapp2.RequestHandler):
     """Renders the revoke.html page"""
