@@ -563,7 +563,7 @@ class RefreshHandler(webapp2.RequestHandler):
             logging.info('Caching response to: %s for %s secs, service: %s', keyid, exp_secs - 10, servicetype)
 
             # Write the result back to the client
-            self.response.write(json.dumps({'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype, 'v2-authid': 'v2:' + entry.service + ':' + rt}))
+            self.response.write(json.dumps({'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype, 'v2_authid': 'v2:' + entry.service + ':' + rt}))
 
         except:
             logging.exception('handler error for ' + servicetype)
@@ -620,11 +620,11 @@ class RefreshHandler(webapp2.RequestHandler):
                 exp_secs = (int)((cached_res['expires'] - datetime.datetime.utcnow()).total_seconds())
 
                 if exp_secs > 30:
-                    logging.info('Serving cached response to: %s, expires in %s secs', keyid, exp_secs)
+                    logging.info('Serving cached response to: %s, expires in %s secs', tokenhash, exp_secs)
                     self.response.write(json.dumps({'access_token': cached_res['access_token'], 'expires': exp_secs, 'type': cached_res['type']}))
                     return
                 else:
-                    logging.info('Cached response to: %s is invalid because it expires in %s', keyid, exp_secs)
+                    logging.info('Cached response to: %s is invalid because it expires in %s', tokenhash, exp_secs)
 
 
             url = service['auth-url']
@@ -644,11 +644,12 @@ class RefreshHandler(webapp2.RequestHandler):
 
             resp = json.loads(content)
             exp_secs = int(resp["expires_in"])
+            expires = datetime.datetime.utcnow() + datetime.timedelta(seconds=exp_secs)
 
-            cached_res = {'access_token': resp['access_token'], 'expires': entry.expires, 'type': servicetype}
+            cached_res = {'access_token': resp['access_token'], 'expires': expires, 'type': servicetype}
 
             memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
-            logging.info('Caching response to: %s for %s secs, service: %s', keyid, exp_secs - 10, servicetype)
+            logging.info('Caching response to: %s for %s secs, service: %s', tokenhash, exp_secs - 10, servicetype)
 
             # Write the result back to the client
             self.response.write(json.dumps({'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype}))            
