@@ -225,6 +225,27 @@ class LoginHandler(webapp2.RequestHandler):
             # OAuth response is JSON
             resp = json.loads(content)
 
+            # If this is a service that does not use refresh tokens,
+            # we just return the access token to the caller
+            if service.has_key('no-refresh-tokens') and service['no-refresh-tokens']:
+                dbmodel.update_fetch_token(statetoken.fetchtoken, resp['access_token'])
+
+                # Report results to the user
+                template_values = {
+                    'service': display,
+                    'appname': settings.APP_NAME,
+                    'longappname': settings.SERVICE_DISPLAYNAME,
+                    'authid':  resp['access_token'],
+                    'fetchtoken': statetoken.fetchtoken
+                }
+
+                template = JINJA_ENVIRONMENT.get_template('logged-in.html')
+                self.response.write(template.render(template_values))
+                statetoken.delete()
+
+                logging.info('Returned access token for service %s', provider['id'])
+                return
+
             # This happens in some cases with Google's OAuth
             if not resp.has_key('refresh_token'):
 
@@ -242,29 +263,11 @@ class LoginHandler(webapp2.RequestHandler):
                     statetoken.delete()
                     return
 
-                elif service.has_key('no-refresh-tokens') and service['no-refresh-tokens']:
-                    # If this is a service that does not use refresh tokens,
-                    # we do not store the token, but just return it raw to the user
-                    dbmodel.update_fetch_token(statetoken.fetchtoken, resp['access_token'])
-
-                    # Report results to the user
-                    template_values = {
-                        'service': display,
-                        'appname': settings.APP_NAME,
-                        'longappname': settings.SERVICE_DISPLAYNAME,
-                        'authid':  resp['access_token'],
-                        'fetchtoken': statetoken.fetchtoken
-                    }
-
-                    template = JINJA_ENVIRONMENT.get_template('logged-in.html')
-                    self.response.write(template.render(template_values))
-                    statetoken.delete()
-
-                    logging.info('Returned access token for service %s', provider['id'])
-                    return
-
                 else:
                     raise Exception('No refresh token found, try to de-authorize the application with the provider')
+
+
+
 
 
             # We store the ID if we get it back
