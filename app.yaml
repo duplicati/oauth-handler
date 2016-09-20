@@ -4,6 +4,14 @@ runtime: python27
 api_version: 1
 threadsafe: no
 
+instance_class: F1
+automatic_scaling:
+  max_concurrent_requests: 20
+  max_idle_instances: 1
+  min_idle_instances: 1
+  min_pending_latency: 60ms
+  max_pending_latency: 100ms
+
 handlers:
 - url: /favicon\.ico
   static_files: favicon.ico
