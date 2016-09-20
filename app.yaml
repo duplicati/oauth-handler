@@ -21,6 +21,10 @@ handlers:
   script: main.app
   login: admin
 
+- url: /checkalive
+  script: main.app
+  login: admin
+
 - url: .*
   script: main.app
 
