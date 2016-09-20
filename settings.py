@@ -17,6 +17,10 @@ APP_NAME = 'CHANGE-ME-IN-CONFIG.PY'
 SERVICE_DISPLAYNAME = APP_NAME + ' OAuth Handler'
 DEFAULT_TOKEN_VERSION = 1
 
+API_KEY=''
+WORKER_URLS=[]
+WORKER_OFFLOAD_RATIO=0
+
 WL_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
 WL_CLIENT_SECRET='XXXXXXXXXXXXXXXXXXXX'
 GD_CLIENT_ID='XXXXXXXXXXXXXXXXXXXX'
@@ -90,6 +94,21 @@ except ImportError:
 
 try:
     from config import TESTING
+except ImportError:
+    pass
+
+try:
+    from config import API_KEY
+except ImportError:
+    pass
+
+try:
+    from config import WORKER_URLS
+except ImportError:
+    pass
+
+try:
+    from config import WORKER_OFFLOAD_RATIO
 except ImportError:
     pass
 

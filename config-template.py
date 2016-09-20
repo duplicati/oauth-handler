@@ -28,6 +28,26 @@
 #    pass
 
 
+
+######## OFFLOAD WORKERS AREA ##########
+
+# These variables are for supporting external OAuth worker machines
+
+# This key is required for requests to /export from the workers
+# The key must be at least 10 characters long
+#API_KEY=''
+
+# Urls to the OAuth worker machines. Each url must end with /refresh.
+# A cron job will check if the remote machines are responding by
+# replacing the trailing /refresh with /isalive
+#WORKER_URLS=[]
+
+# The worker offload ratio controls how likely it is
+# that a request is forwareded to a worker.
+# 0.0 means "never" and 1.0 means always
+#WORKER_OFFLOAD_RATIO=0
+
+
 ######## SECRETS AREA ##########
 
 # Windows Live Secrets

@@ -467,6 +467,16 @@ class RefreshHandler(webapp2.RequestHandler):
             keyid = authid[:authid.index(':')]
             password = authid[authid.index(':')+1:]
 
+            if settings.WORKER_OFFLOAD_RATIO > random.random():
+                workers = memcache.get('worker-urls')
+                #logging.info('workers: %s', workers)
+                if workers != None and len(workers) > 0:
+                    newloc = random.choice(workers)
+                    logging.info('Redirecting request for id %s to %s', keyid, newloc)
+                    self.response.headers['Location'] = newloc
+                    self.response.set_status(302, 'Found')
+                    return
+
             if keyid == 'v2':
                 self.handle_v2(password)
                 return
@@ -732,6 +742,193 @@ class CleanupHandler(webapp2.RequestHandler):
         for n in dbmodel.AuthToken.gql('WHERE expires < :1', (datetime.datetime.utcnow() + datetime.timedelta(days=-365))):
             n.delete()
 
+class ExportHandler(webapp2.RequestHandler):
+    """
+    Handler that exports the refresh token,
+    for use by the backend handlers
+    """
+    def get(self):
+
+        try:
+            if len(settings.API_KEY) < 10 or self.request.headers['X-APIKey'] != settings.API_KEY:
+                
+                if len(settings.API_KEY) < 10:
+                    logging.info('No api key loaded')
+                
+                self.response.headers['X-Reason'] = 'Invalid API key'
+                self.response.set_status(403, 'Invalid API key')
+                return
+
+            authid = self.request.headers['X-AuthID']
+
+            if authid == None or authid == '':
+                self.response.headers['X-Reason'] = 'No authid in query'
+                self.response.set_status(400, 'No authid in query')
+                return
+
+            if authid.find(':') <= 0:
+                self.response.headers['X-Reason'] = 'Invalid authid in query'
+                self.response.set_status(400, 'Invalid authid in query')
+                return
+
+            keyid = authid[:authid.index(':')]
+            password = authid[authid.index(':')+1:]
+
+            if keyid == 'v2':
+                self.response.headers['X-Reason'] = 'No v2 export possible'
+                self.response.set_status(400, 'No v2 export possible')
+                return
+
+            # Find the entry
+            entry = dbmodel.AuthToken.get_by_key_name(keyid)
+            if entry == None:
+                self.response.headers['X-Reason'] = 'No such key'
+                self.response.set_status(404, 'No such key')
+                return
+
+            # Decode
+            data = base64.b64decode(entry.blob)
+            resp = None
+
+            # Decrypt
+            try:
+                resp = json.loads(simplecrypt.decrypt(password, data).decode('utf8'))
+            except:
+                logging.exception('decrypt error')
+                self.response.headers['X-Reason'] = 'Invalid authid password'
+                self.response.set_status(400, 'Invalid authid password')
+                return
+
+            resp['service'] = entry.service
+
+            logging.info('Exported %s bytes for keyid %s', len(json.dumps(resp)), keyid)
+            
+            # Write the result back to the client
+            self.response.headers['Content-Type'] = 'application/json'
+            self.response.write(json.dumps(resp))
+        except:
+            logging.exception('handler error')
+            self.response.headers['X-Reason'] = 'Server error'
+            self.response.set_status(500, 'Server error')    
+
+class ImportHandler(webapp2.RequestHandler):
+    """
+    Handler that imports the refresh token,
+    for use by the backend handlers
+    """
+    def post(self):
+
+        try:
+            if len(settings.API_KEY) < 10 or self.request.headers['X-APIKey'] != settings.API_KEY:
+                self.response.headers['X-Reason'] = 'Invalid API key'
+                self.response.set_status(403, 'Invalid API key')
+                return
+
+            authid = self.request.headers['X-AuthID']
+
+            if authid == None or authid == '':
+                self.response.headers['X-Reason'] = 'No authid in query'
+                self.response.set_status(400, 'No authid in query')
+                return
+
+            if authid.find(':') <= 0:
+                self.response.headers['X-Reason'] = 'Invalid authid in query'
+                self.response.set_status(400, 'Invalid authid in query')
+                return
+
+            keyid = authid[:authid.index(':')]
+            password = authid[authid.index(':')+1:]
+
+            if keyid == 'v2':
+                self.response.headers['X-Reason'] = 'No v2 import possible'
+                self.response.set_status(400, 'No v2 import possible')
+                return
+
+            # Find the entry
+            entry = dbmodel.AuthToken.get_by_key_name(keyid)
+            if entry == None:
+                self.response.headers['X-Reason'] = 'No such key'
+                self.response.set_status(404, 'No such key')
+                return
+
+            # Decode
+            data = base64.b64decode(entry.blob)
+            resp = None
+
+            # Decrypt
+            try:
+                resp = json.loads(simplecrypt.decrypt(password, data).decode('utf8'))
+            except:
+                logging.exception('decrypt error')
+                self.response.headers['X-Reason'] = 'Invalid authid password'
+                self.response.set_status(400, 'Invalid authid password')
+                return
+
+            resp = json.loads(self.request.body)
+            if not 'refresh_token' in resp:
+                logging.info('Import blob does not contain a refresh token')
+                self.response.headers['X-Reason'] = 'Import blob does not contain a refresh token'
+                self.response.set_status(400, 'Import blob does not contain a refresh token')
+                return                
+
+            if not 'expires_in' in resp:
+                logging.info('Import blob does not contain expires_in')
+                self.response.headers['X-Reason'] = 'Import blob does not contain expires_in'
+                self.response.set_status(400, 'Import blob does not contain expires_in')
+                return                
+
+            logging.info('Imported %s bytes for keyid %s', len(json.dumps(resp)), keyid)
+
+            resp['service'] = entry.service
+            exp_secs = int(resp['expires_in']) - 10
+
+            cipher = simplecrypt.encrypt(password, json.dumps(resp))
+            entry.expires = datetime.datetime.utcnow() + datetime.timedelta(seconds=exp_secs)
+            entry.blob = base64.b64encode(cipher)
+            entry.put()
+            
+            # Write the result back to the client
+            self.response.headers['Content-Type'] = 'application/json'
+            self.response.write(json.dumps(resp))
+        except:
+            logging.exception('handler error')
+            self.response.headers['X-Reason'] = 'Server error'
+            self.response.set_status(500, 'Server error')    
+
+class CheckAliveHandler(webapp2.RequestHandler):
+    """
+    Handler that exports the refresh token,
+    for use by the backend handlers
+    """
+    def get(self):
+        if settings.WORKER_URLS == None:
+            return
+
+        data = '%030x' % random.randrange(16**32)
+
+        validhosts = []
+
+        for n in settings.WORKER_URLS:
+            try:
+                url = n[:-len("refresh")] + "isalive?data=" + data
+                logging.info('Checking if server is alive: %s', url)
+
+                req = urllib2.Request(url)
+                f = urllib2.urlopen(req)
+                content = f.read()
+                f.close()
+
+                resp = json.loads(content)
+                if resp["data"] != data:
+                    logging.info('Bad response, was %s, should have been %s', resp['data'], data)
+                else:
+                    validhosts.append(n)
+            except:
+                logging.exception('handler error')
+
+        logging.info('Valid hosts are: %s', validhosts)
+
+        memcache.add(key='worker-urls', value=validhosts, time=60*60*1)
 
 app = webapp2.WSGIApplication([
     ('/logged-in', LoginHandler),
@@ -742,5 +939,8 @@ app = webapp2.WSGIApplication([
     ('/revoked', RevokedHandler),    
     ('/revoke', RevokeHandler),    
     ('/cleanup', CleanupHandler),    
+    ('/export', ExportHandler),
+    ('/import', ImportHandler),
+    ('/checkalive', CheckAliveHandler),
     (r'/.*', IndexHandler)
 ], debug=settings.TESTING)
