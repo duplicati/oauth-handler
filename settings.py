@@ -196,7 +196,7 @@ LOOKUP = {
         'login-url': BOX_LOGIN_URL    
     },
     'dropbox' : {
-        'display': 'DropBox',
+        'display': 'Dropbox',
         'client-id': DROPBOX_CLIENT_ID,
         'client-secret': DROPBOX_CLIENT_SECRET,
         'redirect-uri': DROPBOX_REDIRECT_URI,
@@ -265,7 +265,7 @@ SERVICES = [
         'servicelink': 'https://www.box.com/pricing/personal/'
     },
     {
-        'display': 'DropBox',
+        'display': 'Dropbox',
         'type': 'dropbox',
         'id': 'dropbox',
         'scope': '',
