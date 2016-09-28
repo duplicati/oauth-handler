@@ -262,6 +262,14 @@ SERVICES = [
         'servicelink': 'https://www.box.com/pricing/personal/'
     },
     {
+        'display': 'Box.com',
+        'type': 'box',
+        'id': 'box',
+        'scope': 'root_readwrite',
+        'servicelink': 'https://www.box.com/pricing/personal/',
+        'hidden': True
+    },    
+    {
         'display': 'Dropbox',
         'type': 'dropbox',
         'id': 'dropbox',
