@@ -1,0 +1,26 @@
+= Duplicati OAuth Service Privacy Policy =
+
+This document describes what information the Duplicati OAuth service collects, how it is used, how and where it is stored, whom it is shared with, and how you can remove the stored information.
+
+== How we use your data ==
+The Duplicati OAuth service attempts to collect and store as little information as possible. When you connect to any of the supported OAuth providers, Duplicati obtains a long-term session key. This key, combined with a secret known only to the Duplicati OAuth service, can be exchanged for a short-term key, which can be used to access your account on the site that you have authenticated with.
+
+== How we store your data ==
+To avoid transmitting the long-term session key, we store the long-term session key. To prevent unwanted access to your account, we encrypt the long-term session key with a password before we store it. This password is given to you in the form of an “AuthID” string. It is not possible to recover the long-term session key without this password, meaning it is only possible to intercept this key during a login (and shortly after, as the key is briefly kept in cache). Due to the way OAuth is constructed, we do not have access to, and thus do not store, any personally identifiable information. This includes not storing username, email or password to the authenticating site.
+
+== Where we store and handle your data ==
+The data is stored on Google App Engine, using their scalable storage and server infrastructure. As part of using GAE we are storing log information that shows IP addresses and some request information. This data is stored for a short period, as the amount of data is quite large, and new data overwrites existing data.
+
+== Who we share your data with ==
+As part of the login process, we send the long-term session token to the provider who issued it (after it has been decrypted with the client-provided key). The resulting short-term session key is sent directly to the requesting client, and not stored on the server.
+
+Apart from this exchange of secrets, we do not share your information with anyone. This is enforced since we do not store any information that we could share, except from the log data as described above. Please note that as the service is running on GAE, Google will also have access to the log data.
+
+== How to remove the stored information ==
+You can remove a stored “AuthID” at any time by providing the “AuthID” you want to remove to the removal page, listed on the website. Removal is performed immediately and irrevocably.
+
+If you do not have the AuthID, we cannot remove the information, but since it is encrypted it is not accessible by anyone either.
+
+To ensure that permissions are revoked, you can also use the site you are authenticating with, and revoke access by Duplicati. This will permanently invalidate all the stored (and encrypted) long-term session tokens on the Duplicati OAuth service.
+
+Logins that have not been used for a long period of time are automatically removed.
