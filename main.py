@@ -439,21 +439,35 @@ class RefreshHandler(webapp2.RequestHandler):
     """
 
     def get(self):
+        authid = self.request.get('authid')
+
+        if authid is None or authid == '':
+            authid = self.request.headers['X-AuthID']
+
+        return self.process(authid)
+
+    def post(self):
+        authid = self.request.POST.get('authid')
+
+        if authid is None or authid == '':
+            authid = self.request.headers['X-AuthID']
+
+        return self.process(authid)
+
+    def process(self, authid):
 
         servicetype = 'Unknown'
 
         try:
-            authid = self.request.get('authid')
 
             if authid is None or authid == '':
-                authid = self.request.headers['X-AuthID']
-
-            if authid is None or authid == '':
+                logging.info('No authid in query')
                 self.response.headers['X-Reason'] = 'No authid in query'
                 self.response.set_status(400, 'No authid in query')
                 return
 
             if authid.find(':') <= 0:
+                logging.info('Invalid authid in query')
                 self.response.headers['X-Reason'] = 'Invalid authid in query'
                 self.response.set_status(400, 'Invalid authid in query')
                 return
