@@ -206,30 +206,24 @@ LOOKUP = {
 
 SERVICES = [
     {
-        'display': 'Microsoft OneDrive',
-        'type': 'wl',
-        'id': 'onedrive',
-        'scope': 'wl.offline_access wl.skydrive_update wl.skydrive',
-        'servicelink': 'https://onedrive.live.com',
-        'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="http://explore.live.com/microsoft-service-agreement" target="_blank">Microsoft Service Agreement</a> and <a href="http://privacy.microsoft.com/en-us/fullnotice.mspx" target="_blank">Microsoft Online Privacy Statement</a></p>'
-    },
-    {
-        'display': 'Google Drive',
+        'display': 'Google Drive (limited)',
         'type': 'gd',
         'id': 'googledrive',
         'scope': 'https://www.googleapis.com/auth/drive.file',
         'extraurl': 'access_type=offline&approval_prompt=force',
         'servicelink': 'https://drive.google.com',
-        'deauthlink': 'https://security.google.com/settings/security/permissions'
+        'deauthlink': 'https://security.google.com/settings/security/permissions',
+        'brandimage': '/google-btn.png'
     },
     {
-        'display': 'Google Docs',
+        'display': 'Google Drive (full access)',
         'type': 'gd',
         'id': 'googledocs',
         'scope': 'https://www.googleapis.com/auth/drive',
         'extraurl': 'access_type=offline&approval_prompt=force',
         'servicelink': 'https://drive.google.com',
-        'deauthlink': 'https://security.google.com/settings/security/permissions'
+        'deauthlink': 'https://security.google.com/settings/security/permissions',
+        'brandimage': '/google-btn.png'
     },
     {
         'display': 'Google Cloud Storage',
@@ -238,7 +232,16 @@ SERVICES = [
         'scope': 'https://www.googleapis.com/auth/devstorage.read_write',
         'extraurl': 'access_type=offline&approval_prompt=force',
         'servicelink': 'https://cloud.google.com/storage/',
-        'deauthlink': 'https://security.google.com/settings/security/permissions'
+        'deauthlink': 'https://security.google.com/settings/security/permissions',
+        'brandimage': '/google-btn.png'
+    },
+    {
+        'display': 'Microsoft OneDrive',
+        'type': 'wl',
+        'id': 'onedrive',
+        'scope': 'wl.offline_access wl.skydrive_update wl.skydrive',
+        'servicelink': 'https://onedrive.live.com',
+        'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="http://explore.live.com/microsoft-service-agreement" target="_blank">Microsoft Service Agreement</a> and <a href="http://privacy.microsoft.com/en-us/fullnotice.mspx" target="_blank">Microsoft Online Privacy Statement</a></p>'
     },
     {
         'display': 'HubiC',

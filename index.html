@@ -17,6 +17,11 @@
       <script src="//oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
       <script src="//oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
     <![endif]-->
+    <style type="text/css">
+      .btn-lg { margin: 10px; min-width: 300px; }
+      .btn-lg > .btn-text { display: inline-block; padding: 10px; }
+      ul { list-style-type: none; padding-left: 0px; }
+    </style>
   </head>
   <body>
     <script type="text/javascript">
@@ -57,19 +62,22 @@
 
         {% if providers.length != 1 %}
         <p>This service is intended for {{appname}} users that want to use one of the following OAuth enabled providers:</p>
-        <p>
+        <ul>
         {% for item in providers %}
-          <a href="{{item.servicelink}}" target="_blank">{{item.display}}</a>
+          <li><a href="{{item.servicelink}}" target="_blank">{{item.display}}</a></li>
         {% endfor %}
-        </p>
+        </ul>
         <p> Click the button for the provider you wish to log in with:</p>
         {% endif %}
 
-        <p>
         {% for item in providers %}
-          <a id="start-btn-{{item.id}}" class="btn btn-primary btn-lg" role="button" href="{{item.authlink}}">{{item.display}} login</a>
+            <a id="start-btn-{{item.id}}" class="btn btn-primary btn-lg" role="button" href="{{item.authlink}}">
+            {% if item.brandimage != '' %}
+              <img class="provider-image" src="{{item.brandimage}}" />
+            {% endif %}
+            <div class="btn-text">{{item.display}} login</div>
+            </a>
         {% endfor %}
-        </p>
 
 
         {% for item in providers %}

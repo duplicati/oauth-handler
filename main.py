@@ -140,12 +140,17 @@ class IndexHandler(webapp2.RequestHandler):
             if n.has_key('notes'):
                 notes = n['notes']
 
+            brandimg = ''
+            if n.has_key('brandimage'):
+                brandimg = n['brandimage']
+
             templateitems.append({
                 'display': n['display'],
                 'authlink': link,
                 'id': n['id'],
                 'notes': notes,
-                'servicelink': n['servicelink']
+                'servicelink': n['servicelink'],
+                'brandimage': brandimg
             })
 
         template = JINJA_ENVIRONMENT.get_template('index.html')

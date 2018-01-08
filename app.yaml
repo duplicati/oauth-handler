@@ -17,6 +17,14 @@ handlers:
   static_files: favicon.ico
   upload: favicon\.ico
 
+- url: /google-btn\.png
+  static_files: google-btn.png
+  upload: google-btn\.png
+
+- url: /privacy-policy\.txt
+  static_files: privacy-policy.txt
+  upload: privacy-policy\.txt
+
 - url: /cleanup
   script: main.app
   login: admin
