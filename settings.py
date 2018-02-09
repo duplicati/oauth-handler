@@ -1,12 +1,3 @@
-#############################################
-#                                           #
-#     DO NOT CHANGE THIS FILE !!!!!!        #
-#                                           #
-# You must copy the file config-template.py #
-# to config.py and edit that instead        #
-#                                           #
-#############################################
-
 import os
 
 TESTING = os.environ.get('SERVER_SOFTWARE', '').startswith('Development')
@@ -22,6 +13,8 @@ WORKER_OFFLOAD_RATIO = 0
 
 WL_CLIENT_ID = 'XXXXXXXXXXXXXXXXXXXX'
 WL_CLIENT_SECRET = 'XXXXXXXXXXXXXXXXXXXX'
+MSG_CLIENT_ID = 'XXXXXXXXXXXXXXXXXXXX'
+MSG_CLIENT_SECRET = 'XXXXXXXXXXXXXXXXXXXX'
 GD_CLIENT_ID = 'XXXXXXXXXXXXXXXXXXXX'
 GD_CLIENT_SECRET = 'XXXXXXXXXXXXXXXXXXXX'
 HC_CLIENT_ID = 'XXXXXXXXXXXXXXXXXXXX'
@@ -38,6 +31,12 @@ RATE_LIMIT = 0
 try:
     from config import WL_CLIENT_ID
     from config import WL_CLIENT_SECRET
+except ImportError:
+    pass
+
+try:
+    from config import MSG_CLIENT_ID
+    from config import MSG_CLIENT_SECRET
 except ImportError:
     pass
 
@@ -127,6 +126,10 @@ WL_REDIRECT_URI = OAUTH_CALLBACK_URI
 WL_AUTH_URL = 'https://login.live.com/oauth20_token.srf'
 WL_LOGIN_URL = 'https://login.live.com/oauth20_authorize.srf'
 
+MSG_REDIRECT_URI = OAUTH_CALLBACK_URI
+MSG_AUTH_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
+MSG_LOGIN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
+
 GD_REDIRECT_URI = OAUTH_CALLBACK_URI
 GD_AUTH_URL = 'https://www.googleapis.com/oauth2/v3/token'
 GD_LOGIN_URL = 'https://accounts.google.com/o/oauth2/auth'
@@ -155,6 +158,15 @@ LOOKUP = {
         'redirect-uri': WL_REDIRECT_URI,
         'auth-url': WL_AUTH_URL,
         'login-url': WL_LOGIN_URL
+    },
+
+    'msg': {
+        'display': 'Microsoft Graph',
+        'client-id': MSG_CLIENT_ID,
+        'client-secret': MSG_CLIENT_SECRET,
+        'redirect-uri': MSG_REDIRECT_URI,
+        'auth-url': MSG_AUTH_URL,
+        'login-url': MSG_LOGIN_URL
     },
 
     'gd': {
@@ -236,10 +248,18 @@ SERVICES = [
         'brandimage': '/google-btn.png'
     },
     {
-        'display': 'Microsoft OneDrive',
+        'display': 'Microsoft OneDrive (Live Connect API)',
         'type': 'wl',
         'id': 'onedrive',
         'scope': 'wl.offline_access wl.skydrive_update wl.skydrive',
+        'servicelink': 'https://onedrive.live.com',
+        'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="http://explore.live.com/microsoft-service-agreement" target="_blank">Microsoft Service Agreement</a> and <a href="http://privacy.microsoft.com/en-us/fullnotice.mspx" target="_blank">Microsoft Online Privacy Statement</a></p>'
+    },
+    {
+        'display': 'Microsoft OneDrive (Microsoft Graph API)',
+        'type': 'msg',
+        'id': 'microsoftgraph',
+        'scope': 'offline_access Files.ReadWrite Files.Read',
         'servicelink': 'https://onedrive.live.com',
         'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="http://explore.live.com/microsoft-service-agreement" target="_blank">Microsoft Service Agreement</a> and <a href="http://privacy.microsoft.com/en-us/fullnotice.mspx" target="_blank">Microsoft Online Privacy Statement</a></p>'
     },
