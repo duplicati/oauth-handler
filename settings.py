@@ -13,8 +13,8 @@ WORKER_OFFLOAD_RATIO = 0
 
 WL_CLIENT_ID = 'XXXXXXXXXXXXXXXXXXXX'
 WL_CLIENT_SECRET = 'XXXXXXXXXXXXXXXXXXXX'
-MSG_CLIENT_ID = 'XXXXXXXXXXXXXXXXXXXX'
-MSG_CLIENT_SECRET = 'XXXXXXXXXXXXXXXXXXXX'
+MSGRAPH_CLIENT_ID = 'XXXXXXXXXXXXXXXXXXXX'
+MSGRAPH_CLIENT_SECRET = 'XXXXXXXXXXXXXXXXXXXX'
 GD_CLIENT_ID = 'XXXXXXXXXXXXXXXXXXXX'
 GD_CLIENT_SECRET = 'XXXXXXXXXXXXXXXXXXXX'
 HC_CLIENT_ID = 'XXXXXXXXXXXXXXXXXXXX'
@@ -35,8 +35,8 @@ except ImportError:
     pass
 
 try:
-    from config import MSG_CLIENT_ID
-    from config import MSG_CLIENT_SECRET
+    from config import MSGRAPH_CLIENT_ID
+    from config import MSGRAPH_CLIENT_SECRET
 except ImportError:
     pass
 
@@ -126,9 +126,9 @@ WL_REDIRECT_URI = OAUTH_CALLBACK_URI
 WL_AUTH_URL = 'https://login.live.com/oauth20_token.srf'
 WL_LOGIN_URL = 'https://login.live.com/oauth20_authorize.srf'
 
-MSG_REDIRECT_URI = OAUTH_CALLBACK_URI
-MSG_AUTH_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
-MSG_LOGIN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
+MSGRAPH_REDIRECT_URI = OAUTH_CALLBACK_URI
+MSGRAPH_AUTH_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
+MSGRAPH_LOGIN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
 
 GD_REDIRECT_URI = OAUTH_CALLBACK_URI
 GD_AUTH_URL = 'https://www.googleapis.com/oauth2/v3/token'
@@ -160,13 +160,13 @@ LOOKUP = {
         'login-url': WL_LOGIN_URL
     },
 
-    'msg': {
+    'msgraph': {
         'display': 'Microsoft Graph',
-        'client-id': MSG_CLIENT_ID,
-        'client-secret': MSG_CLIENT_SECRET,
-        'redirect-uri': MSG_REDIRECT_URI,
-        'auth-url': MSG_AUTH_URL,
-        'login-url': MSG_LOGIN_URL
+        'client-id': MSGRAPH_CLIENT_ID,
+        'client-secret': MSGRAPH_CLIENT_SECRET,
+        'redirect-uri': MSGRAPH_REDIRECT_URI,
+        'auth-url': MSGRAPH_AUTH_URL,
+        'login-url': MSGRAPH_LOGIN_URL
     },
 
     'gd': {
@@ -257,7 +257,7 @@ SERVICES = [
     },
     {
         'display': 'Microsoft OneDrive (Microsoft Graph API)',
-        'type': 'msg',
+        'type': 'msgraph',
         'id': 'microsoftgraph',
         'scope': 'offline_access Files.ReadWrite Files.Read',
         'servicelink': 'https://onedrive.live.com',
