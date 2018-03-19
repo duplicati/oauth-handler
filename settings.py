@@ -253,7 +253,7 @@ SERVICES = [
         'id': 'onedrive',
         'scope': 'wl.offline_access wl.skydrive_update wl.skydrive',
         'servicelink': 'https://onedrive.live.com',
-        'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="http://explore.live.com/microsoft-service-agreement" target="_blank">Microsoft Service Agreement</a> and <a href="http://privacy.microsoft.com/en-us/fullnotice.mspx" target="_blank">Microsoft Online Privacy Statement</a></p>'
+        'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="https://www.microsoft.com/en-us/servicesagreement" target="_blank">Microsoft Service Agreement</a> and <a href="https://privacy.microsoft.com/en-us/privacystatement" target="_blank">Microsoft Online Privacy Statement</a></p>'
     },
     {
         'display': 'Microsoft OneDrive (Microsoft Graph API)',
@@ -261,7 +261,7 @@ SERVICES = [
         'id': 'microsoftgraph',
         'scope': 'offline_access Files.ReadWrite Files.Read',
         'servicelink': 'https://onedrive.live.com',
-        'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="http://explore.live.com/microsoft-service-agreement" target="_blank">Microsoft Service Agreement</a> and <a href="http://privacy.microsoft.com/en-us/fullnotice.mspx" target="_blank">Microsoft Online Privacy Statement</a></p>'
+        'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="https://www.microsoft.com/en-us/servicesagreement" target="_blank">Microsoft Service Agreement</a> and <a href="https://privacy.microsoft.com/en-us/privacystatement" target="_blank">Microsoft Online Privacy Statement</a></p>'
     },
     {
         'display': 'HubiC',
