@@ -1,3 +1,13 @@
+####################################################
+#                                                  #
+# DO NOT INCLUDE CLIENT SECRETS IN THIS FILE !!!!! #
+#                                                  #
+# Instead, copy the file config-template.py to     #
+# config.py (which is not committed to the repo)   #
+# and put client secrets there.                    #
+#                                                  #
+####################################################
+
 import os
 
 TESTING = os.environ.get('SERVER_SOFTWARE', '').startswith('Development')
