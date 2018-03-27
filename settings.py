@@ -1,11 +1,12 @@
-#############################################
-#                                           #
-#     DO NOT CHANGE THIS FILE !!!!!!        #
-#                                           #
-# You must copy the file config-template.py #
-# to config.py and edit that instead        #
-#                                           #
-#############################################
+####################################################
+#                                                  #
+# DO NOT INCLUDE CLIENT SECRETS IN THIS FILE !!!!! #
+#                                                  #
+# Instead, copy the file config-template.py to     #
+# config.py (which is not committed to the repo)   #
+# and put client secrets there.                    #
+#                                                  #
+####################################################
 
 import os
 
@@ -22,6 +23,8 @@ WORKER_OFFLOAD_RATIO = 0
 
 WL_CLIENT_ID = 'XXXXXXXXXXXXXXXXXXXX'
 WL_CLIENT_SECRET = 'XXXXXXXXXXXXXXXXXXXX'
+MSGRAPH_CLIENT_ID = 'XXXXXXXXXXXXXXXXXXXX'
+MSGRAPH_CLIENT_SECRET = 'XXXXXXXXXXXXXXXXXXXX'
 GD_CLIENT_ID = 'XXXXXXXXXXXXXXXXXXXX'
 GD_CLIENT_SECRET = 'XXXXXXXXXXXXXXXXXXXX'
 HC_CLIENT_ID = 'XXXXXXXXXXXXXXXXXXXX'
@@ -38,6 +41,12 @@ RATE_LIMIT = 0
 try:
     from config import WL_CLIENT_ID
     from config import WL_CLIENT_SECRET
+except ImportError:
+    pass
+
+try:
+    from config import MSGRAPH_CLIENT_ID
+    from config import MSGRAPH_CLIENT_SECRET
 except ImportError:
     pass
 
@@ -127,6 +136,10 @@ WL_REDIRECT_URI = OAUTH_CALLBACK_URI
 WL_AUTH_URL = 'https://login.live.com/oauth20_token.srf'
 WL_LOGIN_URL = 'https://login.live.com/oauth20_authorize.srf'
 
+MSGRAPH_REDIRECT_URI = OAUTH_CALLBACK_URI
+MSGRAPH_AUTH_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
+MSGRAPH_LOGIN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
+
 GD_REDIRECT_URI = OAUTH_CALLBACK_URI
 GD_AUTH_URL = 'https://www.googleapis.com/oauth2/v3/token'
 GD_LOGIN_URL = 'https://accounts.google.com/o/oauth2/auth'
@@ -155,6 +168,15 @@ LOOKUP = {
         'redirect-uri': WL_REDIRECT_URI,
         'auth-url': WL_AUTH_URL,
         'login-url': WL_LOGIN_URL
+    },
+
+    'msgraph': {
+        'display': 'Microsoft Graph',
+        'client-id': MSGRAPH_CLIENT_ID,
+        'client-secret': MSGRAPH_CLIENT_SECRET,
+        'redirect-uri': MSGRAPH_REDIRECT_URI,
+        'auth-url': MSGRAPH_AUTH_URL,
+        'login-url': MSGRAPH_LOGIN_URL
     },
 
     'gd': {
@@ -236,12 +258,36 @@ SERVICES = [
         'brandimage': '/google-btn.png'
     },
     {
-        'display': 'Microsoft OneDrive',
+        'display': 'Microsoft OneDrive (Live Connect API)',
         'type': 'wl',
         'id': 'onedrive',
         'scope': 'wl.offline_access wl.skydrive_update wl.skydrive',
         'servicelink': 'https://onedrive.live.com',
-        'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="http://explore.live.com/microsoft-service-agreement" target="_blank">Microsoft Service Agreement</a> and <a href="http://privacy.microsoft.com/en-us/fullnotice.mspx" target="_blank">Microsoft Online Privacy Statement</a></p>'
+        'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="https://www.microsoft.com/en-us/servicesagreement" target="_blank">Microsoft Service Agreement</a> and <a href="https://privacy.microsoft.com/en-us/privacystatement" target="_blank">Microsoft Online Privacy Statement</a></p>'
+    },
+    {
+        'display': 'Microsoft OneDrive (Microsoft Graph API)',
+        'type': 'msgraph',
+        'id': 'onedrivev2',
+        'scope': 'offline_access Files.ReadWrite',
+        'servicelink': 'https://onedrive.live.com',
+        'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="https://www.microsoft.com/en-us/servicesagreement" target="_blank">Microsoft Service Agreement</a> and <a href="https://privacy.microsoft.com/en-us/privacystatement" target="_blank">Microsoft Online Privacy Statement</a></p>'
+    },
+    {
+        'display': 'Microsoft SharePoint (Microsoft Graph API)',
+        'type': 'msgraph',
+        'id': 'sharepoint',
+        'scope': 'offline_access Files.ReadWrite',
+        'servicelink': 'https://products.office.com/en-us/sharepoint',
+        'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="https://www.microsoft.com/en-us/servicesagreement" target="_blank">Microsoft Service Agreement</a> and <a href="https://privacy.microsoft.com/en-us/privacystatement" target="_blank">Microsoft Online Privacy Statement</a></p>'
+    },
+    {
+        'display': 'Microsoft Office 365 Groups (Microsoft Graph API)',
+        'type': 'msgraph',
+        'id': 'msgroup',
+        'scope': 'offline_access Files.ReadWrite',
+        'servicelink': 'https://support.office.com/en-us/article/Learn-about-Office-365-groups-b565caa1-5c40-40ef-9915-60fdb2d97fa2',
+        'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="https://www.microsoft.com/en-us/servicesagreement" target="_blank">Microsoft Service Agreement</a> and <a href="https://privacy.microsoft.com/en-us/privacystatement" target="_blank">Microsoft Online Privacy Statement</a></p>'
     },
     {
         'display': 'HubiC',
