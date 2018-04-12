@@ -276,14 +276,14 @@ SERVICES = [
         'display': 'Microsoft SharePoint (Microsoft Graph API)',
         'type': 'msgraph',
         'id': 'sharepoint',
-        'scope': 'offline_access Files.ReadWrite',
+        'scope': 'offline_access Files.ReadWrite.All',
         'servicelink': 'https://products.office.com/en-us/sharepoint'
     },
     {
         'display': 'Microsoft Office 365 Groups (Microsoft Graph API)',
         'type': 'msgraph',
         'id': 'msgroup',
-        'scope': 'offline_access Files.ReadWrite',
+        'scope': 'offline_access Files.ReadWrite.All',
         'servicelink': 'https://support.office.com/en-us/article/Learn-about-Office-365-groups-b565caa1-5c40-40ef-9915-60fdb2d97fa2'
     },
     {
