@@ -283,7 +283,7 @@ SERVICES = [
         'display': 'Microsoft Office 365 Groups (Microsoft Graph API)',
         'type': 'msgraph',
         'id': 'msgroup',
-        'scope': 'offline_access Files.ReadWrite.All',
+        'scope': 'offline_access Files.ReadWrite.All Group.Read.All',
         'servicelink': 'https://support.office.com/en-us/article/Learn-about-Office-365-groups-b565caa1-5c40-40ef-9915-60fdb2d97fa2'
     },
     {
