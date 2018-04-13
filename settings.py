@@ -270,24 +270,21 @@ SERVICES = [
         'type': 'msgraph',
         'id': 'onedrivev2',
         'scope': 'offline_access Files.ReadWrite',
-        'servicelink': 'https://onedrive.live.com',
-        'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="https://www.microsoft.com/en-us/servicesagreement" target="_blank">Microsoft Service Agreement</a> and <a href="https://privacy.microsoft.com/en-us/privacystatement" target="_blank">Microsoft Online Privacy Statement</a></p>'
+        'servicelink': 'https://onedrive.live.com'
     },
     {
         'display': 'Microsoft SharePoint (Microsoft Graph API)',
         'type': 'msgraph',
         'id': 'sharepoint',
         'scope': 'offline_access Files.ReadWrite.All',
-        'servicelink': 'https://products.office.com/en-us/sharepoint',
-        'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="https://www.microsoft.com/en-us/servicesagreement" target="_blank">Microsoft Service Agreement</a> and <a href="https://privacy.microsoft.com/en-us/privacystatement" target="_blank">Microsoft Online Privacy Statement</a></p>'
+        'servicelink': 'https://products.office.com/en-us/sharepoint'
     },
     {
         'display': 'Microsoft Office 365 Groups (Microsoft Graph API)',
         'type': 'msgraph',
         'id': 'msgroup',
         'scope': 'offline_access Files.ReadWrite.All Group.Read.All',
-        'servicelink': 'https://support.office.com/en-us/article/Learn-about-Office-365-groups-b565caa1-5c40-40ef-9915-60fdb2d97fa2',
-        'notes': '<p style="font-size: small">By using the OAuth login service for OneDrive you agree to the <a href="https://www.microsoft.com/en-us/servicesagreement" target="_blank">Microsoft Service Agreement</a> and <a href="https://privacy.microsoft.com/en-us/privacystatement" target="_blank">Microsoft Online Privacy Statement</a></p>'
+        'servicelink': 'https://support.office.com/en-us/article/Learn-about-Office-365-groups-b565caa1-5c40-40ef-9915-60fdb2d97fa2'
     },
     {
         'display': 'HubiC',
