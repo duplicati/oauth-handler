@@ -157,8 +157,8 @@ BOX_AUTH_URL = 'https://api.box.com/oauth2/token'
 BOX_LOGIN_URL = 'https://app.box.com/api/oauth2/authorize'
 
 DROPBOX_REDIRECT_URI = OAUTH_CALLBACK_URI
-DROPBOX_AUTH_URL = 'https://api.dropboxapi.com/1/oauth2/token'
-DROPBOX_LOGIN_URL = 'https://www.dropbox.com/1/oauth2/authorize'
+DROPBOX_AUTH_URL = 'https://api.dropboxapi.com/oauth2/token'
+DROPBOX_LOGIN_URL = 'https://www.dropbox.com/oauth2/authorize'
 
 LOOKUP = {
     'wl': {
@@ -221,8 +221,8 @@ LOOKUP = {
         'redirect-uri': DROPBOX_REDIRECT_URI,
         'auth-url': DROPBOX_AUTH_URL,
         'login-url': DROPBOX_LOGIN_URL,
-        'no-state-for-token-request': True,
-        'no-refresh-tokens': True
+        # Docs say state is supported, but server rejects
+        'no-state-for-token-request': True
     }
 }
 
@@ -319,7 +319,10 @@ SERVICES = [
         'display': 'Dropbox',
         'type': 'dropbox',
         'id': 'dropbox',
+        # Docs say this is possible, but the server rejects
+        # 'scope': 'files.content.write files.content.read files.metadata.read',
         'scope': '',
+        'extraurl': 'token_access_type=offline',
         'servicelink': 'https://dropbox.com'
     }
 ]
