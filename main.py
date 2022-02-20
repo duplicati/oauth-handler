@@ -230,10 +230,15 @@ class LoginHandler(webapp2.RequestHandler):
             #     logging.info('Adding header ' + v['client-id'] + ':' + v['client-secret'])
             #     headers['Authorization'] = "Basic " + base64.b64encode(v['client-id'] + ':' + v['client-secret'])
 
-            req = urllib2.Request(url, data, headers)
-            f = urllib2.urlopen(req)
-            content = f.read()
-            f.close()
+            try:
+                req = urllib2.Request(url, data, headers)
+                f = urllib2.urlopen(req)
+                content = f.read()
+                f.close()
+            except urllib2.HTTPError as err:
+                logging.info('ERR-CODE: ' + str(err.code))
+                logging.info('ERR-BODY: ' + str(err.read()))
+                raise err
 
             if settings.TESTING:
                 logging.info('RESP RAW:' + content)
