@@ -220,6 +220,9 @@ class LoginHandler(webapp2.RequestHandler):
 
             data = urllib.urlencode(request_params)
 
+            if settings.TESTING:
+                logging.info('REQ RAW:' + data)
+
             headers = {'Content-Type': 'application/x-www-form-urlencoded'}
 
             # Alternative method for sending auth, according to HubiC API
