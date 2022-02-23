@@ -222,7 +222,9 @@ LOOKUP = {
         'auth-url': DROPBOX_AUTH_URL,
         'login-url': DROPBOX_LOGIN_URL,
         # Docs say state is supported, but server rejects
-        'no-state-for-token-request': True
+        'no-state-for-token-request': True,
+        # Dropbox is a little picky
+        'no-redirect_uri-for-refresh-request': True
     }
 }
 
