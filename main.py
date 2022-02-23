@@ -566,10 +566,15 @@ class RefreshHandler(webapp2.RequestHandler):
 
             urlfetch.set_default_fetch_deadline(20)
 
-            req = urllib2.Request(url, data, {'Content-Type': 'application/x-www-form-urlencoded'})
-            f = urllib2.urlopen(req)
-            content = f.read()
-            f.close()
+            try:
+                req = urllib2.Request(url, data, {'Content-Type': 'application/x-www-form-urlencoded'})
+                f = urllib2.urlopen(req)
+                content = f.read()
+                f.close()
+            except urllib2.HTTPError as err:
+                logging.info('ERR-CODE: ' + str(err.code))
+                logging.info('ERR-BODY: ' + str(err.read()))
+                raise err
 
             # Store the old refresh_token as some servers do not send it again
             rt = resp['refresh_token']
