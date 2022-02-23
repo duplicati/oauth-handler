@@ -557,13 +557,20 @@ class RefreshHandler(webapp2.RequestHandler):
 
             # Issue a refresh request
             url = service['auth-url']
-            data = urllib.urlencode({'client_id': service['client-id'],
-                                     'redirect_uri': service['redirect-uri'],
-                                     'client_secret': service['client-secret'],
-                                     'grant_type': 'refresh_token',
-                                     'refresh_token': resp['refresh_token']
-                                     })
+            request_params = {
+                'client_id': service['client-id'],
+                'redirect_uri': service['redirect-uri'],
+                'client_secret': service['client-secret'],
+                'grant_type': 'refresh_token',
+                'refresh_token': resp['refresh_token']
+            }
+            # Some services do not allow the state to be passed
+            if service.has_key('no-redirect_uri-for-refresh-request') and service['no-redirect_uri-for-refresh-request']:
+                del request_params['redirect_uri']
 
+            data = urllib.urlencode(request_params)
+            if settings.TESTING:
+                logging.info('REQ RAW: ' + str(data))
             urlfetch.set_default_fetch_deadline(20)
 
             try:
