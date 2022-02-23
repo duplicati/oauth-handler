@@ -250,17 +250,6 @@ SERVICES = [
         'brandimage': '/google-btn.png'
     },
     {
-        'display': 'Google Drive (appdata access)',
-        'type': 'gd',
-        'id': 'googleappdata',
-        'scope': 'https://www.googleapis.com/auth/drive.appdata',
-        'extraurl': 'access_type=offline&approval_prompt=force',
-        'servicelink': 'https://drive.google.com',
-        'deauthlink': 'https://security.google.com/settings/security/permissions',
-        'brandimage': '/google-btn.png',
-        'hidden': True
-    },
-    {
         'display': 'Google Cloud Storage',
         'type': 'gd',
         'id': 'gcs',
