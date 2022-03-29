@@ -25,7 +25,7 @@
       <p>Type in the CLI token</p>
       <form action="/cli-token-login" method="POST">
         <input type="hidden" id="id" name="id" value="{{id}}" />
-        <input type="text" id="token" name="token" />
+        <input class="form-control" type="text" id="token" name="token" required />
         <br/>
         <br/>
         <input class="btn btn-primary btn-lg" role="button" type="submit" value="Login" />
