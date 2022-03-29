@@ -160,6 +160,8 @@ DROPBOX_REDIRECT_URI = OAUTH_CALLBACK_URI
 DROPBOX_AUTH_URL = 'https://api.dropboxapi.com/oauth2/token'
 DROPBOX_LOGIN_URL = 'https://www.dropbox.com/oauth2/authorize'
 
+JOTTACLOUD_AUTH_URL = 'https://id.jottacloud.com/auth/realms/jottacloud/protocol/openid-connect/token'
+
 LOOKUP = {
     'wl': {
         'display': 'Windows Live',
@@ -214,6 +216,7 @@ LOOKUP = {
         'auth-url': BOX_AUTH_URL,
         'login-url': BOX_LOGIN_URL
     },
+
     'dropbox': {
         'display': 'Dropbox',
         'client-id': DROPBOX_CLIENT_ID,
@@ -225,6 +228,13 @@ LOOKUP = {
         'no-state-for-token-request': True,
         # Dropbox is a little picky
         'no-redirect_uri-for-refresh-request': True
+    },
+
+    'jottacloud': {
+        'display': 'Jottacloud',
+        'client-id': "jottacli",
+        'auth-url': JOTTACLOUD_AUTH_URL,
+        'cli-token': True
     }
 }
 
@@ -324,6 +334,13 @@ SERVICES = [
         'scope': 'files.content.write files.content.read files.metadata.read files.metadata.write',
         'extraurl': 'token_access_type=offline',
         'servicelink': 'https://dropbox.com'
+    },
+    {
+        'display': 'Jottacloud',
+        'type': 'jottacloud',
+        'id': 'jottacloud',
+        'scope': 'openid offline_access',
+        'servicelink': 'https://jottacloud.com'
     }
 ]
 
