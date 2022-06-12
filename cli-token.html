@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{appname}}</title>
+    <title>{{longappname}}</title>
 
     <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
     <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
@@ -20,14 +20,15 @@
   </head>
   <body>
     <div class="jumbotron">
-      <h1>{{appname}}</h1>
+      <h1>{{appname}} for {{service}}</h1>
 
-      <p>Type in the AuthID to revoke</p>
-      <form action="/revoked" method="POST">
-        <input class="form-control" type="text" id="authid" name="authid" required />
+      <p>Type in the CLI token</p>
+      <form action="/cli-token-login" method="POST">
+        <input type="hidden" id="id" name="id" value="{{id}}" />
+        <input class="form-control" type="text" id="token" name="token" required />
         <br/>
         <br/>
-        <input class="btn btn-primary btn-lg" role="button" type="submit" value="Revoke AuthID" />
+        <input class="btn btn-primary btn-lg" role="button" type="submit" value="Login" />
       </form>
     </div>
   </body>
