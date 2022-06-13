@@ -666,9 +666,9 @@ class RefreshHandler(webapp2.RequestHandler):
                 'grant_type': 'refresh_token',
                 'refresh_token': resp['refresh_token']
             }
-            if service.has_key("client_secret"):
+            if service.has_key("client-secret"):
                 request_params['client_secret'] = service['client-secret']
-            if service.has_key("redirect_uri"):
+            if service.has_key("redirect-uri"):
                 request_params['redirect_uri'] = service['redirect-uri']
 
             # Some services do not allow the state to be passed
@@ -785,9 +785,9 @@ class RefreshHandler(webapp2.RequestHandler):
                 'grant_type': 'refresh_token',
                 'refresh_token': refresh_token
             }
-            if service.has_key("client_secret"):
+            if service.has_key("client-secret"):
                 request_params['client_secret'] = service['client-secret']
-            if service.has_key("redirect_uri"):
+            if service.has_key("redirect-uri"):
                 request_params['redirect_uri'] = service['redirect-uri']
 
             data = urllib.urlencode(request_params)
