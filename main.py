@@ -172,8 +172,8 @@ class IndexHandler(webapp2.RequestHandler):
                 if self.request.get('token', None) is not None:
                     link += '&token=' + self.request.get('token')
 
-                if tokenversion is not None:
-                    link += '&tokenversion=' + str(tokenversion)
+            if tokenversion is not None:
+                link += '&tokenversion=' + str(tokenversion)
 
             notes = ''
             if n.has_key('notes'):
@@ -396,7 +396,8 @@ class CliTokenHandler(webapp2.RequestHandler):
             'service': provider['display'],
             'appname': settings.APP_NAME,
             'longappname': settings.SERVICE_DISPLAYNAME,
-            'id': provider['id']
+            'id': provider['id'],
+            'tokenversion': self.request.get('tokenversion', '')
         }
 
         template = JINJA_ENVIRONMENT.get_template('cli-token.html')
@@ -413,6 +414,12 @@ class CliTokenLoginHandler(webapp2.RequestHandler):
             id = self.request.POST.get('id')
             provider, service = find_provider_and_service(id)
             display = provider['display']
+
+            tokenversion = None
+            try:
+                tokenversion = int(self.request.POST.get('tokenversion'))
+            except:
+                pass
 
             try:
                 data = self.request.POST.get('token')
@@ -443,6 +450,28 @@ class CliTokenLoginHandler(webapp2.RequestHandler):
                 raise err
 
             resp = json.loads(content)
+
+            # v2 tokens are just the provider name and the refresh token
+            # and they have no stored state on the server
+            if tokenversion == 2:
+                authid = 'v2:' + id + ':' + resp['refresh_token']
+                fetchtoken = dbmodel.create_fetch_token(resp)
+                dbmodel.update_fetch_token(fetchtoken, authid)
+
+                # Report results to the user
+                template_values = {
+                    'service': display,
+                    'appname': settings.APP_NAME,
+                    'longappname': settings.SERVICE_DISPLAYNAME,
+                    'authid': authid,
+                    'fetchtoken': fetchtoken
+                }
+
+                template = JINJA_ENVIRONMENT.get_template('logged-in.html')
+                self.response.write(template.render(template_values))
+
+                logging.info('Returned refresh token for service %s', id)
+                return
 
             keyid, authid = create_authtoken(id, resp)
 
