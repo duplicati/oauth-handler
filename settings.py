@@ -234,7 +234,8 @@ LOOKUP = {
         'display': 'Jottacloud',
         'client-id': "jottacli",
         'auth-url': JOTTACLOUD_AUTH_URL,
-        'cli-token': True
+        'cli-token': True,
+        'refresh-token-rotation': True
     }
 }
 

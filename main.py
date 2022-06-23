@@ -169,11 +169,12 @@ class IndexHandler(webapp2.RequestHandler):
                 link = '/cli-token?id=' + n['id']
             else:
                 link = '/login?id=' + n['id']
-                if self.request.get('token', None) is not None:
-                    link += '&token=' + self.request.get('token')
 
-                if tokenversion is not None:
-                    link += '&tokenversion=' + str(tokenversion)
+            if self.request.get('token', None) is not None:
+                link += '&token=' + self.request.get('token')
+
+            if tokenversion is not None:
+                link += '&tokenversion=' + str(tokenversion)
 
             notes = ''
             if n.has_key('notes'):
@@ -329,6 +330,10 @@ class LoginHandler(webapp2.RequestHandler):
             # v2 tokens are just the provider name and the refresh token
             # and they have no stored state on the server
             if statetoken.version == 2:
+
+                if service.has_key('refresh-token-rotation') and service['refresh-token-rotation']:
+                    raise Exception('Error: This service uses refresh token rotation which is not compatible with AuthID v2')
+
                 authid = 'v2:' + statetoken.service + ':' + resp['refresh_token']
                 dbmodel.update_fetch_token(statetoken.fetchtoken, authid)
 
@@ -396,7 +401,9 @@ class CliTokenHandler(webapp2.RequestHandler):
             'service': provider['display'],
             'appname': settings.APP_NAME,
             'longappname': settings.SERVICE_DISPLAYNAME,
-            'id': provider['id']
+            'id': provider['id'],
+            'fetchtoken':  self.request.get('token', ''),
+            'tokenversion': self.request.get('tokenversion', '')
         }
 
         template = JINJA_ENVIRONMENT.get_template('cli-token.html')
@@ -414,13 +421,21 @@ class CliTokenLoginHandler(webapp2.RequestHandler):
             provider, service = find_provider_and_service(id)
             display = provider['display']
 
+            fetchtoken = self.request.POST.get('fetchtoken', None)
+
+            tokenversion = None
+            try:
+                tokenversion = int(self.request.POST.get('tokenversion'))
+            except:
+                pass
+
             try:
                 data = self.request.POST.get('token')
                 content = base64.urlsafe_b64decode(str(data) + '=' * (-len(data) % 4))
                 resp = json.loads(content)
             except:
                 error = 'Error: Invalid CLI token'
-                raise
+                raise Exception(error)
 
             urlfetch.set_default_fetch_deadline(20)
             url = service['auth-url']
@@ -444,9 +459,33 @@ class CliTokenLoginHandler(webapp2.RequestHandler):
 
             resp = json.loads(content)
 
-            keyid, authid = create_authtoken(id, resp)
+            # v2 tokens are just the provider name and the refresh token
+            # and they have no stored state on the server
+            if tokenversion == 2:
 
-            fetchtoken = dbmodel.create_fetch_token(resp)
+                if service.has_key('refresh-token-rotation') and service['refresh-token-rotation']:
+                    error = 'Error: This service uses refresh token rotation which is not compatible with AuthID v2'
+                    raise Exception(error)
+
+                authid = 'v2:' + id + ':' + resp['refresh_token']
+                dbmodel.update_fetch_token(fetchtoken, authid)
+
+                # Report results to the user
+                template_values = {
+                    'service': display,
+                    'appname': settings.APP_NAME,
+                    'longappname': settings.SERVICE_DISPLAYNAME,
+                    'authid': authid,
+                    'fetchtoken': fetchtoken
+                }
+
+                template = JINJA_ENVIRONMENT.get_template('logged-in.html')
+                self.response.write(template.render(template_values))
+
+                logging.info('Returned refresh token for service %s', id)
+                return
+
+            keyid, authid = create_authtoken(id, resp)
 
             # If this was part of a polling request, signal completion
             dbmodel.update_fetch_token(fetchtoken, authid)
@@ -713,9 +752,13 @@ class RefreshHandler(webapp2.RequestHandler):
             logging.info('Caching response to: %s for %s secs, service: %s', keyid, exp_secs - 10, servicetype)
 
             # Write the result back to the client
-            self.response.write(json.dumps(
-                {'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype,
-                 'v2_authid': 'v2:' + entry.service + ':' + rt}))
+            if service.has_key('refresh-token-rotation') and service['refresh-token-rotation']:
+                self.response.write(json.dumps(
+                    {'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype}))
+            else:
+                self.response.write(json.dumps(
+                    {'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype,
+                    'v2_authid': 'v2:' + entry.service + ':' + rt}))
 
         except:
             logging.exception('handler error for ' + servicetype)
