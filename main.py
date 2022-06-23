@@ -169,8 +169,9 @@ class IndexHandler(webapp2.RequestHandler):
                 link = '/cli-token?id=' + n['id']
             else:
                 link = '/login?id=' + n['id']
-                if self.request.get('token', None) is not None:
-                    link += '&token=' + self.request.get('token')
+
+            if self.request.get('token', None) is not None:
+                link += '&token=' + self.request.get('token')
 
             if tokenversion is not None:
                 link += '&tokenversion=' + str(tokenversion)
@@ -401,6 +402,7 @@ class CliTokenHandler(webapp2.RequestHandler):
             'appname': settings.APP_NAME,
             'longappname': settings.SERVICE_DISPLAYNAME,
             'id': provider['id'],
+            'fetchtoken':  self.request.get('token', ''),
             'tokenversion': self.request.get('tokenversion', '')
         }
 
@@ -418,6 +420,8 @@ class CliTokenLoginHandler(webapp2.RequestHandler):
             id = self.request.POST.get('id')
             provider, service = find_provider_and_service(id)
             display = provider['display']
+
+            fetchtoken = self.request.POST.get('fetchtoken', None)
 
             tokenversion = None
             try:
@@ -464,7 +468,6 @@ class CliTokenLoginHandler(webapp2.RequestHandler):
                     raise Exception(error)
 
                 authid = 'v2:' + id + ':' + resp['refresh_token']
-                fetchtoken = dbmodel.create_fetch_token(resp)
                 dbmodel.update_fetch_token(fetchtoken, authid)
 
                 # Report results to the user
@@ -483,8 +486,6 @@ class CliTokenLoginHandler(webapp2.RequestHandler):
                 return
 
             keyid, authid = create_authtoken(id, resp)
-
-            fetchtoken = dbmodel.create_fetch_token(resp)
 
             # If this was part of a polling request, signal completion
             dbmodel.update_fetch_token(fetchtoken, authid)
