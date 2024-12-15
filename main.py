@@ -1090,3 +1090,6 @@ def check_alive():
     logging.info('Valid hosts are: %s', validhosts)
 
     memcache.add(key='worker-urls', value=validhosts, time=60 * 60 * 1)
+
+if __name__ == '__main__':
+    app.run(debug=settings.TESTING)
