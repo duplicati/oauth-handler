@@ -53,7 +53,7 @@ def find_provider_and_service(id):
 
 def find_service(id):
     id = id.lower()
-    if settings.LOOKUP.has_key(id):
+    if id in settings.LOOKUP:
         return settings.LOOKUP[id]
 
     provider, service = find_provider_and_service(id)
@@ -62,7 +62,7 @@ def find_service(id):
 
 def create_authtoken(provider_id, token):
     # We store the ID if we get it back
-    if token.has_key("user_id"):
+    if 'user_id' in token:
         user_id = token["user_id"]
     else:
         user_id = "N/A"
@@ -114,7 +114,7 @@ def redirect_to_login():
         link += '&response_type=code'
         link += '&scope=' + provider['scope']
         link += '&state=' + statetoken
-        if provider.has_key('extraurl'):
+        if 'extraurl' in provider:
             link += '&' + provider['extraurl']
         link += '&redirect_uri=' + service['redirect-uri']
 
@@ -161,11 +161,11 @@ def index():
         if service['client-id'] is None or service['client-id'][0:8] == 'XXXXXXXX':
             continue
 
-        if filtertype is None and n.has_key('hidden') and n['hidden']:
+        if filtertype is None and 'hidden' in n and n['hidden']:
             continue
 
         link = ''
-        if service.has_key('cli-token') and service['cli-token']:
+        if 'cli-token' in service and service['cli-token']:
             link = '/cli-token?id=' + n['id']
         else:
             link = '/login?id=' + n['id']
@@ -176,11 +176,11 @@ def index():
                 link += '&tokenversion=' + str(tokenversion)
 
         notes = ''
-        if n.has_key('notes'):
+        if 'notes' in n:
             notes = n['notes']
 
         brandimg = ''
-        if n.has_key('brandimage'):
+        if 'brandimage' in n:
             brandimg = n['brandimage']
 
         templateitems.append({
@@ -253,7 +253,7 @@ def login():
         }
 
         # Some services do not allow the state to be passed
-        if service.has_key('no-state-for-token-request') and service['no-state-for-token-request']:
+        if 'no-state-for-token-request' in service and service['no-state-for-token-request']:
             del request_params['state']
 
         data = urllib.parse.urlencode(request_params)
@@ -285,7 +285,7 @@ def login():
 
         # If this is a service that does not use refresh tokens,
         # we just return the access token to the caller
-        if service.has_key('no-refresh-tokens') and service['no-refresh-tokens']:
+        if 'no-refresh-tokens' in service and service['no-refresh-tokens']:
             dbmodel.update_fetch_token(statetoken.fetchtoken, resp['access_token'])
 
             # Report results to the user
@@ -303,9 +303,9 @@ def login():
             return render_template('logged-in.html', **template_values)
 
         # This happens in some cases with Google's OAuth
-        if not resp.has_key('refresh_token'):
+        if 'refresh_token' not in resp:
 
-            if provider.has_key('deauthlink'):
+            if 'deauthlink' in provider:
                 template_values = {
                     'service': display,
                     'authid': 'Server error, you must de-authorize ' + settings.APP_NAME,
@@ -641,13 +641,13 @@ def refresh_handler():
             'grant_type': 'refresh_token',
             'refresh_token': resp['refresh_token']
         }
-        if service.has_key("client-secret"):
+        if "client-secret" in service:
             request_params['client_secret'] = service['client-secret']
-        if service.has_key("redirect-uri"):
+        if "redirect-uri" in service:
             request_params['redirect_uri'] = service['redirect-uri']
 
         # Some services do not allow the state to be passed
-        if service.has_key('no-redirect_uri-for-refresh-request') and service['no-redirect_uri-for-refresh-request']:
+        if 'no-redirect_uri-for-refresh-request' in service and service['no-redirect_uri-for-refresh-request']:
             del request_params['redirect_uri']
 
         data = urllib.parse.urlencode(request_params)
@@ -671,7 +671,7 @@ def refresh_handler():
         exp_secs = int(resp["expires_in"])
 
         # Set the refresh_token if it was missing
-        if not resp.has_key('refresh_token'):
+        if 'refresh_token' not in resp:
             resp['refresh_token'] = rt
 
         # Encrypt the updated response
@@ -762,9 +762,9 @@ def refresh_handle_v2(inputfragment):
             'grant_type': 'refresh_token',
             'refresh_token': refresh_token
         }
-        if service.has_key("client-secret"):
+        if "client-secret" in service:
             request_params['client_secret'] = service['client-secret']
-        if service.has_key("redirect-uri"):
+        if "redirect-uri" in service:
             request_params['redirect_uri'] = service['redirect-uri']
 
         data = urllib.parse.urlencode(request_params)
