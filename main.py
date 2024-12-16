@@ -81,7 +81,7 @@ def create_authtoken(provider_id, token):
 
     # Convert to text and prepare for storage
     b64_cipher = base64.b64encode(cipher)
-    expires = datetime.datetime.utcnow() + datetime.timedelta(seconds=exp_secs)
+    expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=exp_secs)
 
     entry = None
     keyid = None
@@ -225,7 +225,7 @@ def login():
         if statetoken is None:
             raise Exception('No such state found')
 
-        if statetoken.expires < datetime.datetime.utcnow():
+        if statetoken.expires < datetime.datetime.now(datetime.timezone.utc):
             raise Exception('State token has expired')
 
         provider, service = find_provider_and_service(statetoken.service)
@@ -483,7 +483,7 @@ def fetch():
         if entry is None:
             return jsonify({'error': 'No such entry'})
 
-        if entry.expires < datetime.datetime.utcnow():
+        if entry.expires < datetime.datetime.now(datetime.timezone.utc):
             return jsonify({'error': 'No such entry'})
 
         if entry.authid is None or entry.authid == '':
@@ -514,7 +514,7 @@ def token_state():
         if entry is None:
             return jsonify({'error': 'No such entry'})
 
-        if entry.expires < datetime.datetime.utcnow():
+        if entry.expires < datetime.datetime.now(datetime.timezone.utc):
             return jsonify({'error': 'No such entry'})
 
         if entry.authid is None or entry.authid == '':
@@ -595,7 +595,7 @@ def refresh_handler():
 
         cached_res = memcache.get(cacheurl)
         if cached_res is not None and type(cached_res) != type(''):
-            exp_secs = (int)((cached_res['expires'] - datetime.datetime.utcnow()).total_seconds())
+            exp_secs = (int)((cached_res['expires'] - datetime.datetime.now(datetime.timezone.utc)).total_seconds())
 
             if exp_secs > 30:
                 logging.info('Serving cached response to: %s, expires in %s secs', keyid, exp_secs)
@@ -676,7 +676,7 @@ def refresh_handler():
 
         # Encrypt the updated response
         cipher = simplecrypt.encrypt(password, json.dumps(resp))
-        entry.expires = datetime.datetime.utcnow() + datetime.timedelta(seconds=exp_secs)
+        entry.expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=exp_secs)
         entry.blob = base64.b64encode(cipher)
         entry.put()
 
@@ -744,7 +744,7 @@ def refresh_handle_v2(inputfragment):
 
         cached_res = memcache.get(cacheurl)
         if cached_res is not None and type(cached_res) != type(''):
-            exp_secs = (int)((cached_res['expires'] - datetime.datetime.utcnow()).total_seconds())
+            exp_secs = (int)((cached_res['expires'] - datetime.datetime.now(datetime.timezone.utc)).total_seconds())
 
             if exp_secs > 30:
                 logging.info('Serving cached response to: %s, expires in %s secs', tokenhash, exp_secs)
@@ -780,7 +780,7 @@ def refresh_handle_v2(inputfragment):
 
         resp = json.loads(content)
         exp_secs = int(resp["expires_in"])
-        expires = datetime.datetime.utcnow() + datetime.timedelta(seconds=exp_secs)
+        expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=exp_secs)
 
         cached_res = {
             'access_token': resp['access_token'],
@@ -1040,7 +1040,7 @@ def import_handler():
         exp_secs = int(resp['expires_in']) - 10
 
         cipher = simplecrypt.encrypt(password, json.dumps(resp))
-        entry.expires = datetime.datetime.utcnow() + datetime.timedelta(seconds=exp_secs)
+        entry.expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=exp_secs)
         entry.blob = base64.b64encode(cipher)
         entry.put()
 
