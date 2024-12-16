@@ -7,7 +7,7 @@ import json
 import logging
 import random
 import requests
-import urllib
+import urllib.parse
 
 import dbmodel
 from flask import Flask, request, redirect, jsonify, render_template
@@ -256,7 +256,7 @@ def login():
         if service.has_key('no-state-for-token-request') and service['no-state-for-token-request']:
             del request_params['state']
 
-        data = urllib.urlencode(request_params)
+        data = urllib.parse.urlencode(request_params)
 
         if settings.TESTING:
             logging.info('REQ RAW:' + data)
@@ -414,7 +414,7 @@ def cli_token_login():
             raise
 
         url = service['auth-url']
-        data = urllib.urlencode({
+        data = urllib.parse.urlencode({
             'client_id': service['client-id'],
             'grant_type': 'password',
             'scope': provider['scope'],
@@ -650,7 +650,7 @@ def refresh_handler():
         if service.has_key('no-redirect_uri-for-refresh-request') and service['no-redirect_uri-for-refresh-request']:
             del request_params['redirect_uri']
 
-        data = urllib.urlencode(request_params)
+        data = urllib.parse.urlencode(request_params)
         if settings.TESTING:
             logging.info('REQ RAW: ' + str(data))
 
@@ -767,7 +767,7 @@ def refresh_handle_v2(inputfragment):
         if service.has_key("redirect-uri"):
             request_params['redirect_uri'] = service['redirect-uri']
 
-        data = urllib.urlencode(request_params)
+        data = urllib.parse.urlencode(request_params)
 
         try:
             req = requests.post(url, data=data, timeout=20)
