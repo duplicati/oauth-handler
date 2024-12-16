@@ -11,7 +11,7 @@ import urllib.parse
 
 import dbmodel
 from flask import Flask, request, redirect, jsonify, render_template
-import google.appengine.api.memcache as memcache
+from google.appengine.api import memcache
 import password_generator
 import settings
 import simplecrypt
