@@ -10,13 +10,14 @@ import requests
 import urllib.parse
 
 import dbmodel
+from google.cloud import ndb
 from flask import Flask, request, redirect, jsonify, render_template
-from google.appengine.api import memcache
 import password_generator
 import settings
 import simplecrypt
 
 app = Flask(__name__)
+dbclient = ndb.Client()
 
 def wrap_json(obj):
     """This method helps send JSON to the client"""
@@ -89,7 +90,8 @@ def create_authtoken(provider_id, token):
     # Find a random un-used user ID, and store the encrypted data
     while entry is None:
         keyid = '%030x' % random.randrange(16 ** 32)
-        entry = dbmodel.insert_new_authtoken(keyid, user_id, b64_cipher, expires, provider_id)
+        with dbclient.context():
+            entry = dbmodel.insert_new_authtoken(keyid, user_id, b64_cipher, expires, provider_id)
 
     # Return the keyid and authid
     return keyid, keyid + ':' + password
@@ -106,7 +108,8 @@ def redirect_to_login():
         stateentry = None
         while stateentry is None:
             statetoken = '%030x' % random.randrange(16 ** 32)
-            stateentry = dbmodel.insert_new_statetoken(statetoken, provider['id'], request.args.get('token', None),
+            with dbclient.context():
+                stateentry = dbmodel.insert_new_statetoken(statetoken, provider['id'], request.args.get('token', None),
                                                     request.args.get('tokenversion', None))
 
         link = service['login-url']
@@ -135,7 +138,8 @@ def index():
     #  register this with a limited lifetime
     #  so the caller can grab the authid automatically
     if request.args.get('token', None) is not None:
-        dbmodel.create_fetch_token(request.args.get('token'))
+        with dbclient.context():
+            dbmodel.create_fetch_token(request.args.get('token'))
         if settings.TESTING:
             logging.info('Created redir with token %s', request.args.get('token'))
 
@@ -221,7 +225,8 @@ def login():
         if state is None or code is None:
             raise Exception('Response is missing state or code')
 
-        statetoken = dbmodel.StateToken.get_by_key_name(state)
+        with dbclient.context():
+            statetoken = ndb.Key(dbmodel.StateToken, state).get()
         if statetoken is None:
             raise Exception('No such state found')
 
@@ -286,7 +291,8 @@ def login():
         # If this is a service that does not use refresh tokens,
         # we just return the access token to the caller
         if 'no-refresh-tokens' in service and service['no-refresh-tokens']:
-            dbmodel.update_fetch_token(statetoken.fetchtoken, resp['access_token'])
+            with dbclient.context():
+                dbmodel.update_fetch_token(statetoken.fetchtoken, resp['access_token'])
 
             # Report results to the user
             template_values = {
@@ -326,7 +332,8 @@ def login():
         # and they have no stored state on the server
         if statetoken.version == 2:
             authid = 'v2:' + statetoken.service + ':' + resp['refresh_token']
-            dbmodel.update_fetch_token(statetoken.fetchtoken, authid)
+            with dbclient.context():
+                dbmodel.update_fetch_token(statetoken.fetchtoken, authid)
 
             # Report results to the user
             template_values = {
@@ -348,7 +355,8 @@ def login():
         fetchtoken = statetoken.fetchtoken
 
         # If this was part of a polling request, signal completion
-        dbmodel.update_fetch_token(fetchtoken, authid)
+        with dbclient.context():
+            dbmodel.update_fetch_token(fetchtoken, authid)
 
         # Report results to the user
         template_values = {
@@ -359,7 +367,8 @@ def login():
             'fetchtoken': fetchtoken
         }
 
-        statetoken.delete()
+        with dbclient.context():
+            statetoken.key.delete()
         logging.info('Created new authid %s for service %s', keyid, provider['id'])
 
         return render_template('logged-in.html', **template_values)
@@ -435,10 +444,11 @@ def cli_token_login():
 
         keyid, authid = create_authtoken(id, resp)
 
-        fetchtoken = dbmodel.create_fetch_token(resp)
+        with dbclient.context():
+            fetchtoken = dbmodel.create_fetch_token(resp)
 
-        # If this was part of a polling request, signal completion
-        dbmodel.update_fetch_token(fetchtoken, authid)
+            # If this was part of a polling request, signal completion
+            dbmodel.update_fetch_token(fetchtoken, authid)
 
         # Report results to the user
         template_values = {
@@ -479,7 +489,8 @@ def fetch():
         if fetchtoken is None or fetchtoken == '':
             return jsonify({'error': 'Missing token'})
 
-        entry = dbmodel.FetchToken.get_by_key_name(fetchtoken)
+        with dbclient.context():
+            entry = ndb.Key(dbmodel.FetchToken, fetchtoken).get()
         if entry is None:
             return jsonify({'error': 'No such entry'})
 
@@ -510,7 +521,8 @@ def token_state():
         if fetchtoken is None or fetchtoken == '':
             return jsonify({'error': 'Missing token'})
 
-        entry = dbmodel.FetchToken.get_by_key_name(fetchtoken)
+        with dbclient.context():
+            entry = ndb.Key(dbmodel.FetchToken, fetchtoken).get()
         if entry is None:
             return jsonify({'error': 'No such entry'})
 
@@ -565,7 +577,8 @@ def refresh_handler():
         password = authid[authid.index(':') + 1:]
 
         if settings.WORKER_OFFLOAD_RATIO > random.random():
-            workers = memcache.get('worker-urls')
+            with dbclient.context():
+                workers = ndb.get_context().cache.get('worker-urls')
             # logging.info('workers: %s', workers)
             if workers is not None and len(workers) > 0:
                 newloc = random.choice(workers)
@@ -578,10 +591,12 @@ def refresh_handler():
         if settings.RATE_LIMIT > 0:
 
             ratelimiturl = '/ratelimit?id=' + keyid + '&adr=' + request.remote_addr
-            ratelimit = memcache.get(ratelimiturl)
+            with dbclient.context():
+                ratelimit = ndb.get_context().cache.get(ratelimiturl)
 
             if ratelimit is None:
-                memcache.add(key=ratelimiturl, value=1, time=60 * 60)
+                with dbclient.context():
+                    ndb.get_context().cache.add(key=ratelimiturl, value=1, time=60 * 60)
             elif ratelimit > settings.RATE_LIMIT:
                 logging.info('Rate limit response to: %s', keyid)
                 response = jsonify({'error': 'Too many requests for this key, wait 60 minutes'})
@@ -589,11 +604,18 @@ def refresh_handler():
                 response.status_code = 503
                 return response
             else:
-                memcache.incr(ratelimiturl)
+                with dbclient.context():
+                    cache = ndb.get_context().cache
+                    value = cache.get(ratelimiturl)
+                    if value is not None:
+                        cache.set(ratelimiturl, value + 1)
+                    else:
+                        cache.set(ratelimiturl, 1)
 
         cacheurl = '/refresh?id=' + keyid + '&h=' + hashlib.sha256(password).hexdigest()
 
-        cached_res = memcache.get(cacheurl)
+        with dbclient.context():
+            cached_res = ndb.get_context().cache.get(cacheurl)
         if cached_res is not None and type(cached_res) != type(''):
             exp_secs = (int)((cached_res['expires'] - datetime.datetime.now(datetime.timezone.utc)).total_seconds())
 
@@ -609,7 +631,8 @@ def refresh_handler():
                 logging.info('Cached response to: %s is invalid because it expires in %s', keyid, exp_secs)
 
         # Find the entry
-        entry = dbmodel.AuthToken.get_by_key_name(keyid)
+        with dbclient.context():
+            entry = ndb.Key(dbmodel.AuthToken, keyid).get()
         if entry is None:
             response = jsonify({'error': 'No such key'})
             response.headers['X-Reason'] = 'No such key'
@@ -682,7 +705,8 @@ def refresh_handler():
 
         cached_res = {'access_token': resp['access_token'], 'expires': entry.expires, 'type': servicetype}
 
-        memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
+        with dbclient.context():
+            ndb.get_context().cache.set(cacheurl, cached_res, time=exp_secs - 10)
         logging.info('Caching response to: %s for %s secs, service: %s', keyid, exp_secs - 10, servicetype)
 
         # Write the result back to the client
@@ -727,10 +751,12 @@ def refresh_handle_v2(inputfragment):
         if settings.RATE_LIMIT > 0:
 
             ratelimiturl = '/ratelimit?id=' + tokenhash + '&adr=' + request.remote_addr
-            ratelimit = memcache.get(ratelimiturl)
+            with dbclient.context():
+                ratelimit = ndb.get_context().cache.get(ratelimiturl)
 
             if ratelimit is None:
-                memcache.add(key=ratelimiturl, value=1, time=60 * 60)
+                with dbclient.context():
+                    ndb.get_context().cache.add(key=ratelimiturl, value=1, time=60 * 60)
             elif ratelimit > settings.RATE_LIMIT:
                 logging.info('Rate limit response to: %s', tokenhash)
                 response = jsonify({'error': 'Too many requests for this key, wait 60 minutes'})
@@ -738,11 +764,18 @@ def refresh_handle_v2(inputfragment):
                 response.status_code = 503
                 return response
             else:
-                memcache.incr(ratelimiturl)
+                with dbclient.context():
+                    cache = ndb.get_context().cache
+                    value = cache.get(ratelimiturl)
+                    if value is not None:
+                        cache.set(ratelimiturl, value + 1)
+                    else:
+                        cache.set(ratelimiturl, 1)
 
         cacheurl = '/v2/refresh?id=' + tokenhash
 
-        cached_res = memcache.get(cacheurl)
+        with dbclient.context():
+            cached_res = ndb.get_context().cache.get(cacheurl)
         if cached_res is not None and type(cached_res) != type(''):
             exp_secs = (int)((cached_res['expires'] - datetime.datetime.now(datetime.timezone.utc)).total_seconds())
 
@@ -788,7 +821,8 @@ def refresh_handle_v2(inputfragment):
             'type': servicetype
         }
 
-        memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
+        with dbclient.context():
+            ndb.get_context().cache.set(cacheurl, cached_res, time=exp_secs - 10)
         logging.info('Caching response to: %s for %s secs, service: %s', tokenhash, exp_secs - 10, servicetype)
 
         # Write the result back to the client
@@ -844,7 +878,8 @@ def revoked_do_revoke():
         if keyid == 'v2':
             return 'Error: The token must be revoked from the service provider. You can de-authorize the application on the storage providers website.'
 
-        entry = dbmodel.AuthToken.get_by_key_name(keyid)
+        with dbclient.context():
+            entry = ndb.Key(dbmodel.AuthToken, keyid).get()
         if entry is None:
             return 'Error: No such user'
 
@@ -870,17 +905,18 @@ def cleanup():
     """Cron activated page that expires old items from the database"""
 
     # Delete all expired fetch tokens
-    for n in dbmodel.FetchToken.gql('WHERE expires < :1', datetime.datetime.now(datetime.timezone.utc)):
-        n.delete()
+    with dbclient.context():
+        for n in dbmodel.FetchToken.query(dbmodel.FetchToken.expires < datetime.datetime.now(datetime.timezone.utc)):
+            n.delete()
 
-    # Delete all expired state tokens
-    for n in dbmodel.StateToken.gql('WHERE expires < :1', datetime.datetime.now(datetime.timezone.utc)):
-        n.delete()
+        # Delete all expired state tokens
+        for n in dbmodel.StateToken.query(dbmodel.StateToken.expires < datetime.datetime.now(datetime.timezone.utc)):
+            n.delete()
 
-    # Delete all tokens not having seen use in a year
-    for n in dbmodel.AuthToken.gql('WHERE expires < :1',
-                                    (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=-365))):
-        n.delete()
+        # Delete all tokens not having seen use in a year
+        one_year_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=365)
+        for n in dbmodel.AuthToken.query(dbmodel.AuthToken.lastseen < one_year_ago):
+            n.delete()
 
 
 @app.route('/export', methods=['GET'])
@@ -924,7 +960,8 @@ def export():
             return response
 
         # Find the entry
-        entry = dbmodel.AuthToken.get_by_key_name(keyid)
+        with dbclient.context():
+            entry = ndb.Key(dbmodel.AuthToken, keyid).get()
         if entry is None:
             response = jsonify({'error': 'No such key'})
             response.headers['X-Reason'] = 'No such key'
@@ -998,7 +1035,8 @@ def import_handler():
             return response
 
         # Find the entry
-        entry = dbmodel.AuthToken.get_by_key_name(keyid)
+        with dbclient.context():
+            entry = ndb.Key(dbmodel.AuthToken, keyid).get()
         if entry is None:
             response = jsonify({'error': 'No such key'})
             response.headers['X-Reason'] = 'No such key'
@@ -1089,7 +1127,8 @@ def check_alive():
 
     logging.info('Valid hosts are: %s', validhosts)
 
-    memcache.add(key='worker-urls', value=validhosts, time=60 * 60 * 1)
+    with dbclient.context():
+        ndb.get_context().cache.set('worker-urls', validhosts, time=60 * 60)
 
 if __name__ == '__main__':
     app.run(debug=settings.TESTING)
