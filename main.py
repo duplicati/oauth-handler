@@ -130,9 +130,13 @@ def redirect_to_login():
         return response
 
 
-@app.route('/', methods=['GET'])
-def index():
+@app.route('/', defaults={'path':''}, methods=['GET'])
+@app.route('/<path:path>', methods=['GET'])
+def index(path):
     """Renders the index.html file with contents from settings.py"""
+
+    if path != '':
+        logging.warning(f'Received unhandled path request: "{path}"')
 
     # If the request contains a token,
     #  register this with a limited lifetime
