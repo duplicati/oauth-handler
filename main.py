@@ -303,7 +303,8 @@ def login():
                 'fetchtoken': statetoken.fetchtoken
             }
 
-            statetoken.delete()
+            with dbclient.context():
+                statetoken.key.delete()
             logging.info('Returned access token for service %s', provider['id'])
 
             return render_template('logged-in.html', **template_values)
@@ -320,7 +321,8 @@ def login():
                     'fetchtoken': ''
                 }
 
-                statetoken.delete()
+                with dbclient.context():
+                    statetoken.key.delete()
                 logging.info('No refresh token found for service %s', provider['id'])
 
                 return render_template('logged-in.html', **template_values)
@@ -344,7 +346,8 @@ def login():
                 'fetchtoken': statetoken.fetchtoken
             }
 
-            statetoken.delete()
+            with dbclient.context():
+                statetoken.key.delete()
             logging.info('Returned refresh token for service %s', provider['id'])
 
             return render_template('logged-in.html', **template_values)
@@ -892,7 +895,8 @@ def revoked_do_revoke():
             logging.exception('decrypt error')
             return 'Error: Invalid authid password'
 
-        entry.delete()
+        with dbclient.context():
+            entry.key.delete()
         return "Token revoked"
 
     except:
@@ -907,16 +911,16 @@ def cleanup():
     # Delete all expired fetch tokens
     with dbclient.context():
         for n in dbmodel.FetchToken.query(dbmodel.FetchToken.expires < datetime.datetime.now(datetime.timezone.utc)):
-            n.delete()
+            n.key.delete()
 
         # Delete all expired state tokens
         for n in dbmodel.StateToken.query(dbmodel.StateToken.expires < datetime.datetime.now(datetime.timezone.utc)):
-            n.delete()
+            n.key.delete()
 
         # Delete all tokens not having seen use in a year
         one_year_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=365)
         for n in dbmodel.AuthToken.query(dbmodel.AuthToken.lastseen < one_year_ago):
-            n.delete()
+            n.key.delete()
 
 
 @app.route('/export', methods=['GET'])
