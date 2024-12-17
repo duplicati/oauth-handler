@@ -429,8 +429,10 @@ def cli_token_login():
         display = provider['display']
 
         try:
+            # Decode the JWT
             data = request.form.get('token')
-            content = base64.urlsafe_b64decode(str(data) + '=' * (-len(data) % 4))
+            padded_data = str(data) + "=" * (-len(data) % 4)
+            content = base64.urlsafe_b64decode(padded_data)
             resp = json.loads(content)
         except:
             error = 'Error: Invalid CLI token'
