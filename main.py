@@ -141,11 +141,12 @@ def index(path):
     # If the request contains a token,
     #  register this with a limited lifetime
     #  so the caller can grab the authid automatically
-    if request.args.get('token', None) is not None:
+    token = request.args.get('token', None)
+    if token is not None:
         with dbclient.context():
-            dbmodel.create_fetch_token(request.args.get('token'))
+            dbmodel.create_fetch_token(token)
         if settings.TESTING:
-            logging.info('Created redir with token %s', request.args.get('token'))
+            logging.info('Created redir with token %s', token)
 
     filtertype = request.args.get('type', None)
 
@@ -287,7 +288,7 @@ def login():
             raise err
 
         if settings.TESTING:
-            logging.info('RESP RAW:' + content)
+            logging.info(f'RESP RAW: {content}')
 
         # OAuth response is JSON
         resp = json.loads(content)
@@ -619,7 +620,7 @@ def refresh_handler():
                     else:
                         cache.set(ratelimiturl, 1)
 
-        cacheurl = '/refresh?id=' + keyid + '&h=' + hashlib.sha256(password).hexdigest()
+        cacheurl = '/refresh?id=' + keyid + '&h=' + hashlib.sha256(password.encode('utf-8')).hexdigest()
 
         with dbclient.context():
             cached_res = ndb.get_context().cache.get(cacheurl)
