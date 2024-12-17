@@ -19,29 +19,6 @@ import simplecrypt
 app = Flask(__name__)
 dbclient = ndb.Client()
 
-def wrap_json(obj):
-    """This method helps send JSON to the client"""
-    data = json.dumps(obj)
-    cb = request.args.get('callback')
-    if cb is None:
-        cb = request.args.get('jsonp')
-
-    if cb is not None and cb != '':
-        data = cb + '(' + data + ')'
-        response = app.response_class(
-            response=data,
-            status=200,
-            mimetype='application/javascript'
-        )
-    else:
-        response = app.response_class(
-            response=data,
-            status=200,
-            mimetype='application/json'
-        )
-
-    return response
-
 
 def find_provider_and_service(id):
     providers = [n for n in settings.SERVICES if n['id'] == id]
