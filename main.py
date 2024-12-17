@@ -383,6 +383,12 @@ def login():
 
     except:
         logging.exception('handler error for ' + display)
+        error_code = request.args.get('error', None)
+        error_desc = request.args.get('error_description', None)
+        if error_code is not None:
+            logging.error(f'Request error code: {error_code}')
+        if error_desc is not None:
+            logging.error(f'Request error description: {error_desc}')
 
         template_values = {
             'service': display,
