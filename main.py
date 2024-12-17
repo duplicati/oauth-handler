@@ -865,7 +865,7 @@ def revoked():
 
 def revoked_do_revoke():
     try:
-        authid = request.args.get('authid')
+        authid = request.form.get('authid')
         if authid is None or authid == '':
             return "Error: No authid in query"
 
