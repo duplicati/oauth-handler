@@ -178,8 +178,8 @@ def index(path):
             link = '/cli-token?id=' + n['id']
         else:
             link = '/login?id=' + n['id']
-            if request.args.get('token', None) is not None:
-                link += '&token=' + request.args.get('token')
+            if token is not None:
+                link += '&token=' + token
 
             if tokenversion is not None:
                 link += '&tokenversion=' + str(tokenversion)
