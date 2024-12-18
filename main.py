@@ -627,81 +627,80 @@ def refresh_handler():
         # Find the entry
         with dbclient.context():
             entry = ndb.Key(dbmodel.AuthToken, keyid).get()
-        if entry is None:
-            response = jsonify({'error': 'No such key'})
-            response.headers['X-Reason'] = 'No such key'
-            response.status_code = 404
-            return response
+            if entry is None:
+                response = jsonify({'error': 'No such key'})
+                response.headers['X-Reason'] = 'No such key'
+                response.status_code = 404
+                return response
 
-        servicetype = entry.service
+            servicetype = entry.service
 
-        # Decode
-        data = base64.b64decode(entry.blob)
-        resp = None
+            # Decode
+            data = base64.b64decode(entry.blob)
+            resp = None
 
-        # Decrypt
-        try:
-            resp = json.loads(simplecrypt.decrypt(password, data).decode('utf8'))
-        except:
-            logging.exception('decrypt error')
-            response = jsonify({'error': 'Invalid authid password'})
-            response.headers['X-Reason'] = 'Invalid authid password'
-            response.status_code = 400
-            return response
+            # Decrypt
+            try:
+                resp = json.loads(simplecrypt.decrypt(password, data).decode('utf8'))
+            except:
+                logging.exception('decrypt error')
+                response = jsonify({'error': 'Invalid authid password'})
+                response.headers['X-Reason'] = 'Invalid authid password'
+                response.status_code = 400
+                return response
 
-        service = find_service(entry.service)
+            service = find_service(entry.service)
 
-        # Issue a refresh request
-        url = service['auth-url']
-        request_params = {
-            'client_id': service['client-id'],
-            'grant_type': 'refresh_token',
-            'refresh_token': resp['refresh_token']
-        }
-        if "client-secret" in service:
-            request_params['client_secret'] = service['client-secret']
-        if "redirect-uri" in service:
-            request_params['redirect_uri'] = service['redirect-uri']
+            # Issue a refresh request
+            url = service['auth-url']
+            request_params = {
+                'client_id': service['client-id'],
+                'grant_type': 'refresh_token',
+                'refresh_token': resp['refresh_token']
+            }
+            if "client-secret" in service:
+                request_params['client_secret'] = service['client-secret']
+            if "redirect-uri" in service:
+                request_params['redirect_uri'] = service['redirect-uri']
 
-        # Some services do not allow the state to be passed
-        if 'no-redirect_uri-for-refresh-request' in service and service['no-redirect_uri-for-refresh-request']:
-            del request_params['redirect_uri']
+            # Some services do not allow the state to be passed
+            if 'no-redirect_uri-for-refresh-request' in service and service['no-redirect_uri-for-refresh-request']:
+                del request_params['redirect_uri']
 
-        data = urllib.parse.urlencode(request_params)
-        if settings.TESTING:
-            logging.info('REQ RAW: ' + str(data))
+            data = urllib.parse.urlencode(request_params)
+            if settings.TESTING:
+                logging.info('REQ RAW: ' + str(data))
 
-        try:
-            req = requests.post(url, data=data, timeout=20)
-            req.raise_for_status()
-            content = req.content
-        except requests.HTTPError as err:
-            logging.info('ERR-CODE: ' + str(err.response.status_code))
-            logging.info('ERR-BODY: ' + err.response.text)
-            raise err
+            try:
+                req = requests.post(url, data=data, timeout=20)
+                req.raise_for_status()
+                content = req.content
+            except requests.HTTPError as err:
+                logging.info('ERR-CODE: ' + str(err.response.status_code))
+                logging.info('ERR-BODY: ' + err.response.text)
+                raise err
 
-        # Store the old refresh_token as some servers do not send it again
-        rt = resp['refresh_token']
+            # Store the old refresh_token as some servers do not send it again
+            rt = resp['refresh_token']
 
-        # Read the server response
-        resp = json.loads(content)
-        exp_secs = int(resp["expires_in"])
+            # Read the server response
+            resp = json.loads(content)
+            exp_secs = int(resp["expires_in"])
 
-        # Set the refresh_token if it was missing
-        if 'refresh_token' not in resp:
-            resp['refresh_token'] = rt
+            # Set the refresh_token if it was missing
+            if 'refresh_token' not in resp:
+                resp['refresh_token'] = rt
 
-        # Encrypt the updated response
-        cipher = simplecrypt.encrypt(password, json.dumps(resp))
-        entry.expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=exp_secs)
-        entry.blob = base64.b64encode(cipher)
-        entry.put()
+            # Encrypt the updated response
+            cipher = simplecrypt.encrypt(password, json.dumps(resp))
+            entry.expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=exp_secs)
+            entry.blob = base64.b64encode(cipher)
+            entry.put()
 
-        cached_res = {'access_token': resp['access_token'], 'expires': entry.expires, 'type': servicetype}
+            cached_res = {'access_token': resp['access_token'], 'expires': entry.expires, 'type': servicetype}
 
-        with dbclient.context():
             ndb.get_context().cache.set(cacheurl, cached_res, time=exp_secs - 10)
-        logging.info('Caching response to: %s for %s secs, service: %s', keyid, exp_secs - 10, servicetype)
+            logging.info('Caching response to: %s for %s secs, service: %s', keyid, exp_secs - 10, servicetype)
 
         # Write the result back to the client
         return jsonify({
