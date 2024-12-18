@@ -1,6 +1,4 @@
 runtime: python312
-api_version: 1
-threadsafe: no
 
 instance_class: F1
 automatic_scaling:
