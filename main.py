@@ -899,19 +899,28 @@ def revoked_do_revoke():
 def cleanup():
     """Cron activated page that expires old items from the database"""
 
-    # Delete all expired fetch tokens
+    n_fetch = 0
+    n_state = 0
+    n_year = 0
+
     with dbclient.context():
+        # Delete all expired fetch tokens
         for n in dbmodel.FetchToken.query(dbmodel.FetchToken.expires < datetime.datetime.now(datetime.timezone.utc)):
+            n_fetch += 1
             n.key.delete()
 
         # Delete all expired state tokens
         for n in dbmodel.StateToken.query(dbmodel.StateToken.expires < datetime.datetime.now(datetime.timezone.utc)):
+            n_state += 1
             n.key.delete()
 
         # Delete all tokens not having seen use in a year
         one_year_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=365)
-        for n in dbmodel.AuthToken.query(dbmodel.AuthToken.lastseen < one_year_ago):
+        for n in dbmodel.AuthToken.query(dbmodel.AuthToken.expires < one_year_ago):
+            n_year += 1
             n.key.delete()
+
+    return f'Cleanup done, removed {n_fetch} fetch tokens, {n_state} state tokens, and {n_year} auth tokens.'
 
 
 @app.route('/export', methods=['GET'])
