@@ -10,6 +10,7 @@ import requests
 import urllib.parse
 
 import dbmodel
+# TODO google.cloud.datastore is the new way to access datastore in App Engine. However, cloud ndb should still be supported, and is the replacement to app engine ndb.
 from google.cloud import ndb
 from flask import Flask, request, redirect, jsonify, render_template
 import password_generator
