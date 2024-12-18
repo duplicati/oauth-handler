@@ -12,12 +12,14 @@ import urllib.parse
 import dbmodel
 # TODO google.cloud.datastore is the new way to access datastore in App Engine. However, cloud ndb should still be supported, and is the replacement to app engine ndb.
 from google.cloud import ndb
+from google.appengine.api import wrap_wsgi_app, memcache
 from flask import Flask, request, redirect, jsonify, render_template
 import password_generator
 import settings
 import simplecrypt
 
 app = Flask(__name__)
+app.wsgi_app = wrap_wsgi_app(app.wsgi_app)
 dbclient = ndb.Client()
 
 
@@ -571,8 +573,7 @@ def refresh_handler():
         password = authid[authid.index(':') + 1:]
 
         if settings.WORKER_OFFLOAD_RATIO > random.random():
-            with dbclient.context():
-                workers = ndb.get_context().cache.get('worker-urls')
+            workers = memcache.get('worker-urls')
             # logging.info('workers: %s', workers)
             if workers is not None and len(workers) > 0:
                 newloc = random.choice(workers)
@@ -585,12 +586,10 @@ def refresh_handler():
         if settings.RATE_LIMIT > 0:
 
             ratelimiturl = '/ratelimit?id=' + keyid + '&adr=' + request.remote_addr
-            with dbclient.context():
-                ratelimit = ndb.get_context().cache.get(ratelimiturl)
+            ratelimit = memcache.get(ratelimiturl)
 
             if ratelimit is None:
-                with dbclient.context():
-                    ndb.get_context().cache.add(key=ratelimiturl, value=1, time=60 * 60)
+                memcache.add(key=ratelimiturl, value=1, time=60 * 60)
             elif ratelimit > settings.RATE_LIMIT:
                 logging.info('Rate limit response to: %s', keyid)
                 response = jsonify({'error': 'Too many requests for this key, wait 60 minutes'})
@@ -598,18 +597,11 @@ def refresh_handler():
                 response.status_code = 503
                 return response
             else:
-                with dbclient.context():
-                    cache = ndb.get_context().cache
-                    value = cache.get(ratelimiturl)
-                    if value is not None:
-                        cache.set(ratelimiturl, value + 1)
-                    else:
-                        cache.set(ratelimiturl, 1)
+                memcache.incr(ratelimiturl)
 
         cacheurl = '/refresh?id=' + keyid + '&h=' + hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-        with dbclient.context():
-            cached_res = ndb.get_context().cache.get(cacheurl)
+        cached_res = memcache.get(cacheurl)
         if cached_res is not None and type(cached_res) != type(''):
             exp_secs = (int)((cached_res['expires'] - datetime.datetime.now(datetime.timezone.utc)).total_seconds())
 
@@ -699,7 +691,7 @@ def refresh_handler():
 
             cached_res = {'access_token': resp['access_token'], 'expires': entry.expires, 'type': servicetype}
 
-            ndb.get_context().cache.set(cacheurl, cached_res, time=exp_secs - 10)
+            memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
             logging.info('Caching response to: %s for %s secs, service: %s', keyid, exp_secs - 10, servicetype)
 
         # Write the result back to the client
@@ -744,12 +736,10 @@ def refresh_handle_v2(inputfragment):
         if settings.RATE_LIMIT > 0:
 
             ratelimiturl = '/ratelimit?id=' + tokenhash + '&adr=' + request.remote_addr
-            with dbclient.context():
-                ratelimit = ndb.get_context().cache.get(ratelimiturl)
+            ratelimit = memcache.get(ratelimiturl)
 
             if ratelimit is None:
-                with dbclient.context():
-                    ndb.get_context().cache.add(key=ratelimiturl, value=1, time=60 * 60)
+                memcache.add(key=ratelimiturl, value=1, time=60 * 60)
             elif ratelimit > settings.RATE_LIMIT:
                 logging.info('Rate limit response to: %s', tokenhash)
                 response = jsonify({'error': 'Too many requests for this key, wait 60 minutes'})
@@ -757,18 +747,11 @@ def refresh_handle_v2(inputfragment):
                 response.status_code = 503
                 return response
             else:
-                with dbclient.context():
-                    cache = ndb.get_context().cache
-                    value = cache.get(ratelimiturl)
-                    if value is not None:
-                        cache.set(ratelimiturl, value + 1)
-                    else:
-                        cache.set(ratelimiturl, 1)
+                memcache.incr(ratelimiturl)
 
         cacheurl = '/v2/refresh?id=' + tokenhash
 
-        with dbclient.context():
-            cached_res = ndb.get_context().cache.get(cacheurl)
+        cached_res = memcache.get(cacheurl)
         if cached_res is not None and type(cached_res) != type(''):
             exp_secs = (int)((cached_res['expires'] - datetime.datetime.now(datetime.timezone.utc)).total_seconds())
 
@@ -814,8 +797,7 @@ def refresh_handle_v2(inputfragment):
             'type': servicetype
         }
 
-        with dbclient.context():
-            ndb.get_context().cache.set(cacheurl, cached_res, time=exp_secs - 10)
+        memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
         logging.info('Caching response to: %s for %s secs, service: %s', tokenhash, exp_secs - 10, servicetype)
 
         # Write the result back to the client
@@ -1130,8 +1112,7 @@ def check_alive():
 
     logging.info('Valid hosts are: %s', validhosts)
 
-    with dbclient.context():
-        ndb.get_context().cache.set('worker-urls', validhosts, time=60 * 60)
+    memcache.add(key='worker-urls', value=validhosts, time=60 * 60)
 
 if __name__ == '__main__':
     app.run(debug=settings.TESTING)
