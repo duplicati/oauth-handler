@@ -56,3 +56,8 @@ docs/_build/
 # PyBuilder
 target/
 config.py
+
+# Development environment
+venv/
+
+.mypy_cache/
