@@ -35,7 +35,7 @@ def find_service(id):
     if id in settings.LOOKUP:
         return settings.LOOKUP[id]
 
-    provider, service = find_provider_and_service(id)
+    _, service = find_provider_and_service(id)
     return service
 
 
