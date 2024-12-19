@@ -435,6 +435,8 @@ def cli_token_login():
         except requests.HTTPError as err:
             if err.response.status_code == 401:
                 error = 'Error: CLI token could not be authorized, create a new and try again'
+            logging.warning(f'HTTP error {err.response.status_code} on url {url} with data {data}')
+            logging.warning(f'The following content was returned: {err.response.content}')
             raise err
 
         resp = json.loads(content)
