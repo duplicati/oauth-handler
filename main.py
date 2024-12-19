@@ -419,13 +419,14 @@ def cli_token_login():
             raise
 
         url = service['auth-url']
-        data = urllib.parse.urlencode({
+        # Jottacloud doesn't like the data to be urlencoded, so we send it as JSON.
+        data = {
             'client_id': service['client-id'],
             'grant_type': 'password',
             'scope': provider['scope'],
             'username': resp['username'],
             'password': resp['auth_token']
-        })
+        }
 
         try:
             response = requests.post(url, data=data, timeout=20)
@@ -441,7 +442,7 @@ def cli_token_login():
         keyid, authid = create_authtoken(id, resp)
 
         with dbclient.context():
-            fetchtoken = dbmodel.create_fetch_token(resp)
+            fetchtoken = dbmodel.create_fetch_token(resp['id_token'])
 
             # If this was part of a polling request, signal completion
             dbmodel.update_fetch_token(fetchtoken, authid)
@@ -659,12 +660,13 @@ def refresh_handler():
             if 'no-redirect_uri-for-refresh-request' in service and service['no-redirect_uri-for-refresh-request']:
                 del request_params['redirect_uri']
 
-            data = urllib.parse.urlencode(request_params)
-            if settings.TESTING:
-                logging.info('REQ RAW: ' + str(data))
+            # Jottacloud doesn't like the data to be urlencoded, so we send it as JSON.
+            #data = urllib.parse.urlencode(request_params)
+            #if settings.TESTING:
+            #    logging.info('REQ RAW: ' + str(data))
 
             try:
-                req = requests.post(url, data=data, timeout=20)
+                req = requests.post(url, data=request_params, timeout=20)
                 req.raise_for_status()
                 content = req.content
             except requests.HTTPError as err:
