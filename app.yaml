@@ -1,33 +1,34 @@
 runtime: python312
 
+app_engine_apis: true
 instance_class: F1
 automatic_scaling:
-  max_concurrent_requests: 20
+  max_instances: 20
+  max_concurrent_requests: 100
   max_idle_instances: 1
-  min_idle_instances: 1
-  min_pending_latency: 60ms
-  max_pending_latency: 100ms
+  min_idle_instances: 0
+  max_pending_latency: automatic
 
 handlers:
-- url: /favicon\.ico
-  static_files: favicon.ico
-  upload: favicon\.ico
+  - url: /favicon\.ico
+    static_files: favicon.ico
+    upload: favicon\.ico
 
-- url: /google-btn\.png
-  static_files: google-btn.png
-  upload: google-btn\.png
+  - url: /google-btn\.png
+    static_files: google-btn.png
+    upload: google-btn\.png
 
-- url: /privacy-policy\.txt
-  static_files: privacy-policy.txt
-  upload: privacy-policy\.txt
+  - url: /privacy-policy\.txt
+    static_files: privacy-policy.txt
+    upload: privacy-policy\.txt
 
-- url: /cleanup
-  script: main.app
-  login: admin
+  - url: /cleanup
+    script: main.app
+    login: admin
 
-- url: /checkalive
-  script: main.app
-  login: admin
+  - url: /checkalive
+    script: main.app
+    login: admin
 
-- url: .*
-  script: main.app
+  - url: /.*
+    script: main.app
