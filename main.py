@@ -3,43 +3,24 @@
 import base64
 import datetime
 import hashlib
+import json
 import logging
-import os
 import random
-import urllib
-import urllib2
-
-import jinja2
-import webapp2
-from django.utils import simplejson as json
-from google.appengine.api import memcache
-from google.appengine.api import urlfetch
+import requests
+import urllib.parse
 
 import dbmodel
+# TODO google.cloud.datastore is the new way to access datastore in App Engine. However, cloud ndb should still be supported, and is the replacement to app engine ndb.
+from google.cloud import ndb
+from google.appengine.api import wrap_wsgi_app, memcache
+from flask import Flask, request, redirect, jsonify, render_template
 import password_generator
 import settings
 import simplecrypt
 
-JINJA_ENVIRONMENT = jinja2.Environment(
-    loader=jinja2.FileSystemLoader(os.path.dirname(__file__)),
-    extensions=['jinja2.ext.autoescape'],
-    autoescape=True)
-
-
-def wrap_json(self, obj):
-    """This method helps send JSON to the client"""
-    data = json.dumps(obj)
-    cb = self.request.get('callback')
-    if cb is None:
-        cb = self.request.get('jsonp')
-
-    if cb is not None and cb != '':
-        data = cb + '(' + data + ')'
-        self.response.headers['Content-Type'] = 'application/javascript'
-    else:
-        self.response.headers['Content-Type'] = 'application/json'
-
-    return data
+app = Flask(__name__)
+app.wsgi_app = wrap_wsgi_app(app.wsgi_app)
+dbclient = ndb.Client()
 
 
 def find_provider_and_service(id):
@@ -53,16 +34,16 @@ def find_provider_and_service(id):
 
 def find_service(id):
     id = id.lower()
-    if settings.LOOKUP.has_key(id):
+    if id in settings.LOOKUP:
         return settings.LOOKUP[id]
 
-    provider, service = find_provider_and_service(id)
+    _, service = find_provider_and_service(id)
     return service
 
 
 def create_authtoken(provider_id, token):
     # We store the ID if we get it back
-    if token.has_key("user_id"):
+    if 'user_id' in token:
         user_id = token["user_id"]
     else:
         user_id = "N/A"
@@ -81,7 +62,7 @@ def create_authtoken(provider_id, token):
 
     # Convert to text and prepare for storage
     b64_cipher = base64.b64encode(cipher)
-    expires = datetime.datetime.utcnow() + datetime.timedelta(seconds=exp_secs)
+    expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=exp_secs)
 
     entry = None
     keyid = None
@@ -89,116 +70,127 @@ def create_authtoken(provider_id, token):
     # Find a random un-used user ID, and store the encrypted data
     while entry is None:
         keyid = '%030x' % random.randrange(16 ** 32)
-        entry = dbmodel.insert_new_authtoken(keyid, user_id, b64_cipher, expires, provider_id)
+        with dbclient.context():
+            entry = dbmodel.insert_new_authtoken(keyid, user_id, b64_cipher, expires, provider_id)
 
     # Return the keyid and authid
     return keyid, keyid + ':' + password
 
 
-class RedirectToLoginHandler(webapp2.RequestHandler):
+@app.route('/login', methods=['GET'])
+def redirect_to_login():
     """Creates a state and redirects the user to the login page"""
 
-    def get(self):
-        try:
-            provider, service = find_provider_and_service(self.request.get('id', None))
+    try:
+        provider, service = find_provider_and_service(request.args.get('id', None))
 
-            # Find a random un-used state token
-            stateentry = None
-            while stateentry is None:
-                statetoken = '%030x' % random.randrange(16 ** 32)
-                stateentry = dbmodel.insert_new_statetoken(statetoken, provider['id'], self.request.get('token', None),
-                                                           self.request.get('tokenversion', None))
+        # Find a random un-used state token
+        stateentry = None
+        while stateentry is None:
+            statetoken = '%030x' % random.randrange(16 ** 32)
+            with dbclient.context():
+                stateentry = dbmodel.insert_new_statetoken(statetoken, provider['id'], request.args.get('token', None),
+                                                    request.args.get('tokenversion', None))
 
-            link = service['login-url']
-            link += '?client_id=' + service['client-id']
-            link += '&response_type=code'
-            link += '&scope=' + provider['scope']
-            link += '&state=' + statetoken
-            if provider.has_key('extraurl'):
-                link += '&' + provider['extraurl']
-            link += '&redirect_uri=' + service['redirect-uri']
+        link = service['login-url']
+        link += '?client_id=' + service['client-id']
+        link += '&response_type=code'
+        link += '&scope=' + provider['scope']
+        link += '&state=' + statetoken
+        if 'extraurl' in provider:
+            link += '&' + provider['extraurl']
+        link += '&redirect_uri=' + service['redirect-uri']
 
-            self.redirect(link)
+        return redirect(link)
 
-        except:
-            logging.exception('handler error')
-            self.response.set_status(500, 'Server error')
-            self.response.write(wrap_json(self, {'error': 'Server error'}))
+    except:
+        logging.exception('handler error')
+        response = jsonify({'error': 'Server error'})
+        response.status_code = 500
+        return response
 
 
-class IndexHandler(webapp2.RequestHandler):
+@app.route('/', defaults={'path':''}, methods=['GET'])
+@app.route('/<path:path>', methods=['GET'])
+def index(path):
     """Renders the index.html file with contents from settings.py"""
 
-    def get(self):
+    if path != '':
+        logging.warning(f'Received unhandled path request: "{path}"')
 
-        # If the request contains a token,
-        #  register this with a limited lifetime
-        #  so the caller can grab the authid automatically
-        if self.request.get('token', None) is not None:
-            dbmodel.create_fetch_token(self.request.get('token'))
-            if settings.TESTING:
-                logging.info('Created redir with token %s', self.request.get('token'))
+    # If the request contains a token,
+    #  register this with a limited lifetime
+    #  so the caller can grab the authid automatically
+    token = request.args.get('token', None)
+    if token is not None:
+        with dbclient.context():
+            dbmodel.create_fetch_token(token)
+        if settings.TESTING:
+            logging.info('Created redir with token %s', token)
 
-        filtertype = self.request.get('type', None)
+    filtertype = request.args.get('type', None)
 
-        tokenversion = settings.DEFAULT_TOKEN_VERSION
+    tokenversion = settings.DEFAULT_TOKEN_VERSION
 
-        try:
-            if self.request.get('tokenversion') is not None:
-                tokenversion = int(self.request.get('tokenversion'))
-        except:
-            pass
+    try:
+        if request.args.get('tokenversion') is not None:
+            tokenversion = int(request.args.get('tokenversion'))
+    except:
+        pass
 
-        templateitems = []
-        for n in settings.SERVICES:
-            service = settings.LOOKUP[n['type']]
+    templateitems = []
+    for n in settings.SERVICES:
+        service = settings.LOOKUP[n['type']]
 
-            # If there is a ?type= parameter, filter the results
-            if filtertype is not None and filtertype != n['id']:
-                continue
+        # If there is a ?type= parameter, filter the results
+        if filtertype is not None and filtertype != n['id']:
+            continue
 
-            # If the client id is invalid or missing, skip the entry
-            if service['client-id'] is None or service['client-id'][0:8] == 'XXXXXXXX':
-                continue
+        # If the client id is invalid or missing, skip the entry
+        if service['client-id'] is None or service['client-id'][0:8] == 'XXXXXXXX':
+            continue
 
-            if filtertype is None and n.has_key('hidden') and n['hidden']:
-                continue
+        if filtertype is None and 'hidden' in n and n['hidden']:
+            continue
 
-            link = ''
-            if service.has_key('cli-token') and service['cli-token']:
-                link = '/cli-token?id=' + n['id']
-            else:
-                link = '/login?id=' + n['id']
-                if self.request.get('token', None) is not None:
-                    link += '&token=' + self.request.get('token')
+        link = ''
+        if 'cli-token' in service and service['cli-token']:
+            link = '/cli-token?id=' + n['id']
+        else:
+            link = '/login?id=' + n['id']
+            if token is not None:
+                link += '&token=' + token
 
-                if tokenversion is not None:
-                    link += '&tokenversion=' + str(tokenversion)
+            if tokenversion is not None:
+                link += '&tokenversion=' + str(tokenversion)
 
-            notes = ''
-            if n.has_key('notes'):
-                notes = n['notes']
+        notes = ''
+        if 'notes' in n:
+            notes = n['notes']
 
-            brandimg = ''
-            if n.has_key('brandimage'):
-                brandimg = n['brandimage']
+        brandimg = ''
+        if 'brandimage' in n:
+            brandimg = n['brandimage']
 
-            templateitems.append({
-                'display': n['display'],
-                'authlink': link,
-                'id': n['id'],
-                'notes': notes,
-                'servicelink': n['servicelink'],
-                'brandimage': brandimg
-            })
+        templateitems.append({
+            'display': n['display'],
+            'authlink': link,
+            'id': n['id'],
+            'notes': notes,
+            'servicelink': n['servicelink'],
+            'brandimage': brandimg
+        })
 
-        template = JINJA_ENVIRONMENT.get_template('index.html')
-        self.response.write(template.render({'redir': self.request.get('redirect', None), 'appname': settings.APP_NAME,
-                                             'longappname': settings.SERVICE_DISPLAYNAME, 'providers': templateitems,
-                                             'tokenversion': tokenversion}))
+    return render_template('index.html',
+        redir=request.args.get('redirect', None),
+        appname=settings.APP_NAME,
+        longappname=settings.SERVICE_DISPLAYNAME,
+        providers=templateitems,
+        tokenversion=tokenversion)
 
 
-class LoginHandler(webapp2.RequestHandler):
+@app.route('/logged-in', methods=['GET'])
+def login():
     """
     Handles the login callback from the OAuth server
     This is called after the user grants access on the remote server
@@ -206,250 +198,129 @@ class LoginHandler(webapp2.RequestHandler):
     rendered
     """
 
-    def get(self, service=None):
-        display = 'Unknown'
-        try:
-            # Grab state and code from request
-            state = self.request.get('state')
-            code = self.request.get('code')
+    display = 'Unknown'
+    try:
+        # Grab state and code from request
+        state = request.args.get('state')
+        code = request.args.get('code')
 
-            if settings.TESTING:
-                logging.info('Log-in with code %s, and state %s', code, state)
+        if settings.TESTING:
+            logging.info('Log-in with code %s, and state %s', code, state)
 
-            if state is None or code is None:
-                raise Exception('Response is missing state or code')
+        if state is None or code is None:
+            raise Exception('Response is missing state or code')
 
-            statetoken = dbmodel.StateToken.get_by_key_name(state)
-            if statetoken is None:
-                raise Exception('No such state found')
+        with dbclient.context():
+            statetoken = ndb.Key(dbmodel.StateToken, state).get()
+        if statetoken is None:
+            raise Exception('No such state found')
 
-            if statetoken.expires < datetime.datetime.utcnow():
-                raise Exception('State token has expired')
+        if statetoken.expires < datetime.datetime.now(datetime.timezone.utc):
+            raise Exception('State token has expired')
 
-            provider, service = find_provider_and_service(statetoken.service)
+        provider, service = find_provider_and_service(statetoken.service)
 
-            display = provider['display']
+        display = provider['display']
 
-            redir_uri = service['redirect-uri']
-            if self.request.get('token') is not None:
-                redir_uri += self.request.get('token')
+        redir_uri = service['redirect-uri']
+        if request.args.get('token') is not None:
+            redir_uri += request.args.get('token')
 
-            if settings.TESTING:
-                logging.info('Got log-in with url %s', redir_uri)
-                logging.info('Sending to %s', service['auth-url'])
+        if settings.TESTING:
+            logging.info('Got log-in with url %s', redir_uri)
+            logging.info('Sending to %s', service['auth-url'])
 
-            # Some services are slow...
-            urlfetch.set_default_fetch_deadline(20)
+        # With the returned code, request a refresh and access token
+        url = service['auth-url']
 
-            # With the returned code, request a refresh and access token
-            url = service['auth-url']
-
-            request_params = {
-                'client_id': service['client-id'],
-                'redirect_uri': redir_uri,
-                'client_secret': service['client-secret'],
-                'state': state,
-                'code': code,
-                'grant_type': 'authorization_code'
-            }
-
-            # Some services do not allow the state to be passed
-            if service.has_key('no-state-for-token-request') and service['no-state-for-token-request']:
-                del request_params['state']
-
-            data = urllib.urlencode(request_params)
-
-            if settings.TESTING:
-                logging.info('REQ RAW:' + data)
-
-            headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-
-            # Alternative method for sending auth, according to HubiC API
-            # if service == 'hc':
-            #     logging.info('Adding header ' + v['client-id'] + ':' + v['client-secret'])
-            #     headers['Authorization'] = "Basic " + base64.b64encode(v['client-id'] + ':' + v['client-secret'])
-
-            try:
-                req = urllib2.Request(url, data, headers)
-                f = urllib2.urlopen(req)
-                content = f.read()
-                f.close()
-            except urllib2.HTTPError as err:
-                logging.info('ERR-CODE: ' + str(err.code))
-                logging.info('ERR-BODY: ' + str(err.read()))
-                raise err
-
-            if settings.TESTING:
-                logging.info('RESP RAW:' + content)
-
-            # OAuth response is JSON
-            resp = json.loads(content)
-
-            # If this is a service that does not use refresh tokens,
-            # we just return the access token to the caller
-            if service.has_key('no-refresh-tokens') and service['no-refresh-tokens']:
-                dbmodel.update_fetch_token(statetoken.fetchtoken, resp['access_token'])
-
-                # Report results to the user
-                template_values = {
-                    'service': display,
-                    'appname': settings.APP_NAME,
-                    'longappname': settings.SERVICE_DISPLAYNAME,
-                    'authid': resp['access_token'],
-                    'fetchtoken': statetoken.fetchtoken
-                }
-
-                template = JINJA_ENVIRONMENT.get_template('logged-in.html')
-                self.response.write(template.render(template_values))
-                statetoken.delete()
-
-                logging.info('Returned access token for service %s', provider['id'])
-                return
-
-            # This happens in some cases with Google's OAuth
-            if not resp.has_key('refresh_token'):
-
-                if provider.has_key('deauthlink'):
-                    template_values = {
-                        'service': display,
-                        'authid': 'Server error, you must de-authorize ' + settings.APP_NAME,
-                        'showdeauthlink': 'true',
-                        'deauthlink': provider['deauthlink'],
-                        'fetchtoken': ''
-                    }
-
-                    template = JINJA_ENVIRONMENT.get_template('logged-in.html')
-                    self.response.write(template.render(template_values))
-                    statetoken.delete()
-                    return
-
-                else:
-                    raise Exception('No refresh token found, try to de-authorize the application with the provider')
-
-            # v2 tokens are just the provider name and the refresh token
-            # and they have no stored state on the server
-            if statetoken.version == 2:
-                authid = 'v2:' + statetoken.service + ':' + resp['refresh_token']
-                dbmodel.update_fetch_token(statetoken.fetchtoken, authid)
-
-                # Report results to the user
-                template_values = {
-                    'service': display,
-                    'appname': settings.APP_NAME,
-                    'longappname': settings.SERVICE_DISPLAYNAME,
-                    'authid': authid,
-                    'fetchtoken': statetoken.fetchtoken
-                }
-
-                template = JINJA_ENVIRONMENT.get_template('logged-in.html')
-                self.response.write(template.render(template_values))
-                statetoken.delete()
-
-                logging.info('Returned refresh token for service %s', provider['id'])
-                return
-
-            # Return the id and password to the user
-            keyid, authid = create_authtoken(provider['id'], resp)
-
-            fetchtoken = statetoken.fetchtoken
-
-            # If this was part of a polling request, signal completion
-            dbmodel.update_fetch_token(fetchtoken, authid)
-
-            # Report results to the user
-            template_values = {
-                'service': display,
-                'appname': settings.APP_NAME,
-                'longappname': settings.SERVICE_DISPLAYNAME,
-                'authid': authid,
-                'fetchtoken': fetchtoken
-            }
-
-            template = JINJA_ENVIRONMENT.get_template('logged-in.html')
-            self.response.write(template.render(template_values))
-            statetoken.delete()
-
-            logging.info('Created new authid %s for service %s', keyid, provider['id'])
-
-        except:
-            logging.exception('handler error for ' + display)
-
-            template_values = {
-                'service': display,
-                'appname': settings.APP_NAME,
-                'longappname': settings.SERVICE_DISPLAYNAME,
-                'authid': 'Server error, close window and try again',
-                'fetchtoken': ''
-            }
-
-            template = JINJA_ENVIRONMENT.get_template('logged-in.html')
-            self.response.write(template.render(template_values))
-
-class CliTokenHandler(webapp2.RequestHandler):
-    """Renders the cli-token.html page"""
-
-    def get(self):
-
-        provider, service = find_provider_and_service(self.request.get('id', None))
-
-        template_values = {
-            'service': provider['display'],
-            'appname': settings.APP_NAME,
-            'longappname': settings.SERVICE_DISPLAYNAME,
-            'id': provider['id']
+        request_params = {
+            'client_id': service['client-id'],
+            'redirect_uri': redir_uri,
+            'client_secret': service['client-secret'],
+            'state': state,
+            'code': code,
+            'grant_type': 'authorization_code'
         }
 
-        template = JINJA_ENVIRONMENT.get_template('cli-token.html')
-        self.response.write(template.render(template_values))
+        # Some services do not allow the state to be passed
+        if 'no-state-for-token-request' in service and service['no-state-for-token-request']:
+            del request_params['state']
 
+        data = urllib.parse.urlencode(request_params)
 
-class CliTokenLoginHandler(webapp2.RequestHandler):
-    """Handler that processes cli-token login and redirects the user to the logged-in page"""
+        if settings.TESTING:
+            logging.info('REQ RAW:' + data)
 
-    def post(self):
-        display = 'Unknown'
-        error = 'Server error, close window and try again'
+        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+
+        # Alternative method for sending auth, according to HubiC API
+        # if service == 'hc':
+        #     logging.info('Adding header ' + v['client-id'] + ':' + v['client-secret'])
+        #     headers['Authorization'] = "Basic " + base64.b64encode(v['client-id'] + ':' + v['client-secret'])
+
         try:
-            id = self.request.POST.get('id')
-            provider, service = find_provider_and_service(id)
-            display = provider['display']
+            response = requests.post(url, data=data, headers=headers, timeout=20)
+            response.raise_for_status()
+            content = response.content
+        except requests.HTTPError as err:
+            logging.info('ERR-CODE: ' + str(err.response.status_code))
+            logging.info('ERR-BODY: ' + err.response.text)
+            raise err
 
-            try:
-                data = self.request.POST.get('token')
-                content = base64.urlsafe_b64decode(str(data) + '=' * (-len(data) % 4))
-                resp = json.loads(content)
-            except:
-                error = 'Error: Invalid CLI token'
-                raise
+        if settings.TESTING:
+            logging.info(f'RESP RAW: {content}')
 
-            urlfetch.set_default_fetch_deadline(20)
-            url = service['auth-url']
-            data = urllib.urlencode({
-                'client_id': service['client-id'],
-                'grant_type': 'password',
-                'scope': provider['scope'],
-                'username': resp['username'],
-                'password': resp['auth_token']
-            })
-            try:
-                req = urllib2.Request(url, data, {'Content-Type': 'application/x-www-form-urlencoded'})
-                f = urllib2.urlopen(req)
-                content = f.read()
-                f.close()
-            except urllib2.HTTPError as err:
-                if err.code == 401:
-                    # If trying to re-use a single-use cli token
-                    error = 'Error: CLI token could not be authorized, create a new and try again'
-                raise err
+        # OAuth response is JSON
+        resp = json.loads(content)
 
-            resp = json.loads(content)
+        # If this is a service that does not use refresh tokens,
+        # we just return the access token to the caller
+        if 'no-refresh-tokens' in service and service['no-refresh-tokens']:
+            with dbclient.context():
+                dbmodel.update_fetch_token(statetoken.fetchtoken, resp['access_token'])
 
-            keyid, authid = create_authtoken(id, resp)
+            # Report results to the user
+            template_values = {
+                'service': display,
+                'appname': settings.APP_NAME,
+                'longappname': settings.SERVICE_DISPLAYNAME,
+                'authid': resp['access_token'],
+                'fetchtoken': statetoken.fetchtoken
+            }
 
-            fetchtoken = dbmodel.create_fetch_token(resp)
+            with dbclient.context():
+                statetoken.key.delete()
+            logging.info('Returned access token for service %s', provider['id'])
 
-            # If this was part of a polling request, signal completion
-            dbmodel.update_fetch_token(fetchtoken, authid)
+            return render_template('logged-in.html', **template_values)
+
+        # This happens in some cases with Google's OAuth
+        if 'refresh_token' not in resp:
+
+            if 'deauthlink' in provider:
+                template_values = {
+                    'service': display,
+                    'authid': 'Server error, you must de-authorize ' + settings.APP_NAME,
+                    'showdeauthlink': 'true',
+                    'deauthlink': provider['deauthlink'],
+                    'fetchtoken': ''
+                }
+
+                with dbclient.context():
+                    statetoken.key.delete()
+                logging.info('No refresh token found for service %s', provider['id'])
+
+                return render_template('logged-in.html', **template_values)
+
+            else:
+                raise Exception('No refresh token found, try to de-authorize the application with the provider')
+
+        # v2 tokens are just the provider name and the refresh token
+        # and they have no stored state on the server
+        if statetoken.version == 2:
+            authid = 'v2:' + statetoken.service + ':' + resp['refresh_token']
+            with dbclient.context():
+                dbmodel.update_fetch_token(statetoken.fetchtoken, authid)
 
             # Report results to the user
             template_values = {
@@ -457,190 +328,305 @@ class CliTokenLoginHandler(webapp2.RequestHandler):
                 'appname': settings.APP_NAME,
                 'longappname': settings.SERVICE_DISPLAYNAME,
                 'authid': authid,
-                'fetchtoken': fetchtoken
+                'fetchtoken': statetoken.fetchtoken
             }
 
-            template = JINJA_ENVIRONMENT.get_template('logged-in.html')
-            self.response.write(template.render(template_values))
+            with dbclient.context():
+                statetoken.key.delete()
+            logging.info('Returned refresh token for service %s', provider['id'])
 
-            logging.info('Created new authid %s for service %s', keyid, id)
+            return render_template('logged-in.html', **template_values)
 
+        # Return the id and password to the user
+        keyid, authid = create_authtoken(provider['id'], resp)
+
+        fetchtoken = statetoken.fetchtoken
+
+        # If this was part of a polling request, signal completion
+        with dbclient.context():
+            dbmodel.update_fetch_token(fetchtoken, authid)
+
+        # Report results to the user
+        template_values = {
+            'service': display,
+            'appname': settings.APP_NAME,
+            'longappname': settings.SERVICE_DISPLAYNAME,
+            'authid': authid,
+            'fetchtoken': fetchtoken
+        }
+
+        with dbclient.context():
+            statetoken.key.delete()
+        logging.info('Created new authid %s for service %s', keyid, provider['id'])
+
+        return render_template('logged-in.html', **template_values)
+
+    except:
+        logging.exception('handler error for ' + display)
+        error_code = request.args.get('error', None)
+        error_desc = request.args.get('error_description', None)
+        if error_code is not None:
+            logging.error(f'Request error code: {error_code}')
+        if error_desc is not None:
+            logging.error(f'Request error description: {error_desc}')
+
+        template_values = {
+            'service': display,
+            'appname': settings.APP_NAME,
+            'longappname': settings.SERVICE_DISPLAYNAME,
+            'authid': 'Server error, close window and try again',
+            'fetchtoken': ''
+        }
+
+        return render_template('logged-in.html', **template_values)
+
+
+@app.route('/cli-token', methods=['GET'])
+def cli_token():
+    """Renders the cli-token.html page"""
+
+    provider, service = find_provider_and_service(request.args.get('id', None))
+
+    template_values = {
+        'service': provider['display'],
+        'appname': settings.APP_NAME,
+        'longappname': settings.SERVICE_DISPLAYNAME,
+        'id': provider['id']
+    }
+
+    return render_template('cli-token.html', **template_values)
+
+
+@app.route('/cli-token-login', methods=['POST'])
+def cli_token_login():
+    """Handler that processes cli-token login and redirects the user to the logged-in page"""
+
+    display = 'Unknown'
+    error = 'Server error, close window and try again'
+    try:
+        id = request.form.get('id')
+        provider, service = find_provider_and_service(id)
+        display = provider['display']
+
+        try:
+            # Decode the JWT
+            data = request.form.get('token')
+            padded_data = str(data) + "=" * (-len(data) % 4)
+            content = base64.urlsafe_b64decode(padded_data)
+            resp = json.loads(content)
         except:
-            logging.exception('handler error for ' + display)
+            error = 'Error: Invalid CLI token'
+            raise
 
-            template_values = {
-                'service': display,
-                'appname': settings.APP_NAME,
-                'longappname': settings.SERVICE_DISPLAYNAME,
-                'authid': error,
-                'fetchtoken': ''
-            }
+        url = service['auth-url']
+        # Jottacloud doesn't like the data to be urlencoded, so we send it as JSON.
+        data = {
+            'client_id': service['client-id'],
+            'grant_type': 'password',
+            'scope': provider['scope'],
+            'username': resp['username'],
+            'password': resp['auth_token']
+        }
 
-            template = JINJA_ENVIRONMENT.get_template('logged-in.html')
-            self.response.write(template.render(template_values))
+        try:
+            response = requests.post(url, data=data, timeout=20)
+            response.raise_for_status()
+            content = response.content
+        except requests.HTTPError as err:
+            if err.response.status_code == 401:
+                error = 'Error: CLI token could not be authorized, create a new and try again'
+            logging.warning(f'HTTP error {err.response.status_code} on url {url} with data {data}')
+            logging.warning(f'The following content was returned: {err.response.content}')
+            raise err
+
+        resp = json.loads(content)
+
+        keyid, authid = create_authtoken(id, resp)
+
+        with dbclient.context():
+            fetchtoken = dbmodel.create_fetch_token(resp['id_token'])
+
+            # If this was part of a polling request, signal completion
+            dbmodel.update_fetch_token(fetchtoken, authid)
+
+        # Report results to the user
+        template_values = {
+            'service': display,
+            'appname': settings.APP_NAME,
+            'longappname': settings.SERVICE_DISPLAYNAME,
+            'authid': authid,
+            'fetchtoken': fetchtoken
+        }
+
+        logging.info('Created new authid %s for service %s', keyid, id)
+
+        return render_template('logged-in.html', **template_values)
+
+    except:
+        logging.exception('handler error for ' + display)
+
+        template_values = {
+            'service': display,
+            'appname': settings.APP_NAME,
+            'longappname': settings.SERVICE_DISPLAYNAME,
+            'authid': error,
+            'fetchtoken': ''
+        }
+
+        return render_template('logged-in.html', **template_values)
 
 
-class FetchHandler(webapp2.RequestHandler):
+@app.route('/fetch', methods=['GET'])
+def fetch():
     """Handler that returns the authid associated with a token"""
 
-    def get(self):
-        try:
-            fetchtoken = self.request.get('token')
+    try:
+        fetchtoken = request.args.get('token')
 
-            # self.headers.add('Access-Control-Allow-Origin', '*')
+        # self.headers.add('Access-Control-Allow-Origin', '*')
 
-            if fetchtoken is None or fetchtoken == '':
-                self.response.write(wrap_json(self, {'error': 'Missing token'}))
-                return
+        if fetchtoken is None or fetchtoken == '':
+            return jsonify({'error': 'Missing token'})
 
-            entry = dbmodel.FetchToken.get_by_key_name(fetchtoken)
-            if entry is None:
-                self.response.write(wrap_json(self, {'error': 'No such entry'}))
-                return
+        with dbclient.context():
+            entry = ndb.Key(dbmodel.FetchToken, fetchtoken).get()
+        if entry is None:
+            return jsonify({'error': 'No such entry'})
 
-            if entry.expires < datetime.datetime.utcnow():
-                self.response.write(wrap_json(self, {'error': 'No such entry'}))
-                return
+        if entry.expires < datetime.datetime.now(datetime.timezone.utc):
+            return jsonify({'error': 'No such entry'})
 
-            if entry.authid is None or entry.authid == '':
-                self.response.write(wrap_json(self, {'wait': 'Not ready'}))
-                return
+        if entry.authid is None or entry.authid == '':
+            return jsonify({'wait': 'Not ready'})
 
-            entry.fetched = True
-            entry.put()
+        entry.fetched = True
+        entry.put()
 
-            self.response.write(wrap_json(self, {'authid': entry.authid}))
-        except:
-            logging.exception('handler error')
-            self.response.set_status(500, 'Server error')
-            self.response.write(wrap_json(self, {'error': 'Server error'}))
+        return jsonify({'authid': entry.authid})
+    except:
+        logging.exception('handler error')
+        response = jsonify({'error': 'Server error'})
+        response.status_code = 500
+        return response
 
 
-class TokenStateHandler(webapp2.RequestHandler):
+@app.route('/token-state', methods=['GET'])
+def token_state():
     """Handler to query the state of an active token"""
 
-    def get(self):
-        try:
-            fetchtoken = self.request.get('token')
+    try:
+        fetchtoken = request.args.get('token')
 
-            if fetchtoken is None or fetchtoken == '':
-                self.response.write(wrap_json(self, {'error': 'Missing token'}))
-                return
+        if fetchtoken is None or fetchtoken == '':
+            return jsonify({'error': 'Missing token'})
 
-            entry = dbmodel.FetchToken.get_by_key_name(fetchtoken)
-            if entry is None:
-                self.response.write(wrap_json(self, {'error': 'No such entry'}))
-                return
+        with dbclient.context():
+            entry = ndb.Key(dbmodel.FetchToken, fetchtoken).get()
+        if entry is None:
+            return jsonify({'error': 'No such entry'})
 
-            if entry.expires < datetime.datetime.utcnow():
-                self.response.write(wrap_json(self, {'error': 'No such entry'}))
-                return
+        if entry.expires < datetime.datetime.now(datetime.timezone.utc):
+            return jsonify({'error': 'No such entry'})
 
-            if entry.authid is None or entry.authid == '':
-                self.response.write(wrap_json(self, {'wait': 'Not ready'}))
-                return
+        if entry.authid is None or entry.authid == '':
+            return jsonify({'wait': 'Not ready'})
 
-            self.response.write(wrap_json(self, {'success': entry.fetched}))
-        except:
-            logging.exception('handler error')
-            self.response.set_status(500, 'Server error')
-            self.response.write(wrap_json(self, {'error': 'Server error'}))
+        return jsonify({'success': entry.fetched})
+    except:
+        logging.exception('handler error')
+
+        response = jsonify({'error': 'Server error'})
+        response.status_code = 500
+
+        return response
 
 
-class RefreshHandler(webapp2.RequestHandler):
+@app.route('/refresh', methods=['GET', 'POST'])
+def refresh_handler():
     """
     Handler that retrieves a new access token,
     by decrypting the stored blob to retrieve the
     refresh token, and then requesting a new access
     token
     """
+    authid = request.args.get('authid') if request.method == 'GET' else request.form.get('authid')
 
-    def get(self):
-        authid = self.request.get('authid')
+    if authid is None or authid == '':
+        authid = request.headers.get('X-AuthID')
 
+    servicetype = 'Unknown'
+
+    try:
         if authid is None or authid == '':
-            authid = self.request.headers['X-AuthID']
+            logging.info('No authid in query')
+            response = jsonify({'error': 'No authid in query'})
+            response.headers['X-Reason'] = 'No authid in query'
+            response.status_code = 400
+            return response
 
-        return self.process(authid)
 
-    def post(self):
-        authid = self.request.POST.get('authid')
+        if authid.find(':') <= 0:
+            logging.info('Invalid authid in query')
+            response = jsonify({'error': 'Invalid authid in query'})
+            response.headers['X-Reason'] = 'Invalid authid in query'
+            response.status_code = 400
+            return response
 
-        if authid is None or authid == '':
-            authid = self.request.headers['X-AuthID']
+        keyid = authid[:authid.index(':')]
+        password = authid[authid.index(':') + 1:]
 
-        return self.process(authid)
+        if settings.WORKER_OFFLOAD_RATIO > random.random():
+            workers = memcache.get('worker-urls')
+            # logging.info('workers: %s', workers)
+            if workers is not None and len(workers) > 0:
+                newloc = random.choice(workers)
+                logging.info('Redirecting request for id %s to %s', keyid, newloc)
+                return redirect(newloc, code=302)
 
-    def process(self, authid):
+        if keyid == 'v2':
+            return refresh_handle_v2(password)
 
-        servicetype = 'Unknown'
+        if settings.RATE_LIMIT > 0:
 
-        try:
+            ratelimiturl = '/ratelimit?id=' + keyid + '&adr=' + request.remote_addr
+            ratelimit = memcache.get(ratelimiturl)
 
-            if authid is None or authid == '':
-                logging.info('No authid in query')
-                self.response.headers['X-Reason'] = 'No authid in query'
-                self.response.set_status(400, 'No authid in query')
-                return
+            if ratelimit is None:
+                memcache.add(key=ratelimiturl, value=1, time=60 * 60)
+            elif ratelimit > settings.RATE_LIMIT:
+                logging.info('Rate limit response to: %s', keyid)
+                response = jsonify({'error': 'Too many requests for this key, wait 60 minutes'})
+                response.headers['X-Reason'] = 'Too many requests for this key, wait 60 minutes'
+                response.status_code = 503
+                return response
+            else:
+                memcache.incr(ratelimiturl)
 
-            if authid.find(':') <= 0:
-                logging.info('Invalid authid in query')
-                self.response.headers['X-Reason'] = 'Invalid authid in query'
-                self.response.set_status(400, 'Invalid authid in query')
-                return
+        cacheurl = '/refresh?id=' + keyid + '&h=' + hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-            keyid = authid[:authid.index(':')]
-            password = authid[authid.index(':') + 1:]
+        cached_res = memcache.get(cacheurl)
+        if cached_res is not None and type(cached_res) != type(''):
+            exp_secs = (int)((cached_res['expires'] - datetime.datetime.now(datetime.timezone.utc)).total_seconds())
 
-            if settings.WORKER_OFFLOAD_RATIO > random.random():
-                workers = memcache.get('worker-urls')
-                # logging.info('workers: %s', workers)
-                if workers is not None and len(workers) > 0:
-                    newloc = random.choice(workers)
-                    logging.info('Redirecting request for id %s to %s', keyid, newloc)
-                    self.response.headers['Location'] = newloc
-                    self.response.set_status(302, 'Found')
-                    return
+            if exp_secs > 30:
+                logging.info('Serving cached response to: %s, expires in %s secs', keyid, exp_secs)
+                response = jsonify({
+                    'access_token': cached_res['access_token'],
+                    'expires': exp_secs,
+                    'type': cached_res['type']
+                })
+                return response
+            else:
+                logging.info('Cached response to: %s is invalid because it expires in %s', keyid, exp_secs)
 
-            if keyid == 'v2':
-                self.handle_v2(password)
-                return
-
-            if settings.RATE_LIMIT > 0:
-
-                ratelimiturl = '/ratelimit?id=' + keyid + '&adr=' + self.request.remote_addr
-                ratelimit = memcache.get(ratelimiturl)
-
-                if ratelimit is None:
-                    memcache.add(key=ratelimiturl, value=1, time=60 * 60)
-                elif ratelimit > settings.RATE_LIMIT:
-                    logging.info('Rate limit response to: %s', keyid)
-                    self.response.headers['X-Reason'] = 'Too many request for this key, wait 60 minutes'
-                    self.response.set_status(503, 'Too many request for this key, wait 60 minutes')
-                    return
-                else:
-                    memcache.incr(ratelimiturl)
-
-            cacheurl = '/refresh?id=' + keyid + '&h=' + hashlib.sha256(password).hexdigest()
-
-            cached_res = memcache.get(cacheurl)
-            if cached_res is not None and type(cached_res) != type(''):
-                exp_secs = (int)((cached_res['expires'] - datetime.datetime.utcnow()).total_seconds())
-
-                if exp_secs > 30:
-                    logging.info('Serving cached response to: %s, expires in %s secs', keyid, exp_secs)
-                    self.response.write(json.dumps(
-                        {'access_token': cached_res['access_token'], 'expires': exp_secs, 'type': cached_res['type']}))
-                    return
-                else:
-                    logging.info('Cached response to: %s is invalid because it expires in %s', keyid, exp_secs)
-
-            # Find the entry
-            entry = dbmodel.AuthToken.get_by_key_name(keyid)
+        # Find the entry
+        with dbclient.context():
+            entry = ndb.Key(dbmodel.AuthToken, keyid).get()
             if entry is None:
-                self.response.headers['X-Reason'] = 'No such key'
-                self.response.set_status(404, 'No such key')
-                return
+                response = jsonify({'error': 'No such key'})
+                response.headers['X-Reason'] = 'No such key'
+                response.status_code = 404
+                return response
 
             servicetype = entry.service
 
@@ -653,9 +639,10 @@ class RefreshHandler(webapp2.RequestHandler):
                 resp = json.loads(simplecrypt.decrypt(password, data).decode('utf8'))
             except:
                 logging.exception('decrypt error')
-                self.response.headers['X-Reason'] = 'Invalid authid password'
-                self.response.set_status(400, 'Invalid authid password')
-                return
+                response = jsonify({'error': 'Invalid authid password'})
+                response.headers['X-Reason'] = 'Invalid authid password'
+                response.status_code = 400
+                return response
 
             service = find_service(entry.service)
 
@@ -666,28 +653,27 @@ class RefreshHandler(webapp2.RequestHandler):
                 'grant_type': 'refresh_token',
                 'refresh_token': resp['refresh_token']
             }
-            if service.has_key("client-secret"):
+            if "client-secret" in service:
                 request_params['client_secret'] = service['client-secret']
-            if service.has_key("redirect-uri"):
+            if "redirect-uri" in service:
                 request_params['redirect_uri'] = service['redirect-uri']
 
             # Some services do not allow the state to be passed
-            if service.has_key('no-redirect_uri-for-refresh-request') and service['no-redirect_uri-for-refresh-request']:
+            if 'no-redirect_uri-for-refresh-request' in service and service['no-redirect_uri-for-refresh-request']:
                 del request_params['redirect_uri']
 
-            data = urllib.urlencode(request_params)
-            if settings.TESTING:
-                logging.info('REQ RAW: ' + str(data))
-            urlfetch.set_default_fetch_deadline(20)
+            # Jottacloud doesn't like the data to be urlencoded, so we send it as JSON.
+            #data = urllib.parse.urlencode(request_params)
+            #if settings.TESTING:
+            #    logging.info('REQ RAW: ' + str(data))
 
             try:
-                req = urllib2.Request(url, data, {'Content-Type': 'application/x-www-form-urlencoded'})
-                f = urllib2.urlopen(req)
-                content = f.read()
-                f.close()
-            except urllib2.HTTPError as err:
-                logging.info('ERR-CODE: ' + str(err.code))
-                logging.info('ERR-BODY: ' + str(err.read()))
+                req = requests.post(url, data=request_params, timeout=20)
+                req.raise_for_status()
+                content = req.content
+            except requests.HTTPError as err:
+                logging.info('ERR-CODE: ' + str(err.response.status_code))
+                logging.info('ERR-BODY: ' + err.response.text)
                 raise err
 
             # Store the old refresh_token as some servers do not send it again
@@ -698,12 +684,12 @@ class RefreshHandler(webapp2.RequestHandler):
             exp_secs = int(resp["expires_in"])
 
             # Set the refresh_token if it was missing
-            if not resp.has_key('refresh_token'):
+            if 'refresh_token' not in resp:
                 resp['refresh_token'] = rt
 
             # Encrypt the updated response
             cipher = simplecrypt.encrypt(password, json.dumps(resp))
-            entry.expires = datetime.datetime.utcnow() + datetime.timedelta(seconds=exp_secs)
+            entry.expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=exp_secs)
             entry.blob = base64.b64encode(cipher)
             entry.put()
 
@@ -712,399 +698,425 @@ class RefreshHandler(webapp2.RequestHandler):
             memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
             logging.info('Caching response to: %s for %s secs, service: %s', keyid, exp_secs - 10, servicetype)
 
-            # Write the result back to the client
-            self.response.write(json.dumps(
-                {'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype,
-                 'v2_authid': 'v2:' + entry.service + ':' + rt}))
+        # Write the result back to the client
+        return jsonify({
+            'access_token': resp['access_token'],
+            'expires': exp_secs,
+            'type': servicetype,
+            'v2_authid': 'v2:' + entry.service + ':' + rt
+        })
+    except:
+        logging.exception('handler error for ' + servicetype)
+        response = jsonify({'error': 'Server error'})
+        response.headers['X-Reason'] = 'Server error'
+        response.status_code = 500
 
-        except:
-            logging.exception('handler error for ' + servicetype)
-            self.response.headers['X-Reason'] = 'Server error'
-            self.response.set_status(500, 'Server error')
 
-    def post(self):
-        self.get()
-
+def refresh_handle_v2(inputfragment):
     """
     Handler that retrieves a new access token,
     from the provided refresh token
     """
+    servicetype = 'Unknown'
+    try:
+        if inputfragment.find(':') <= 0:
+            response = jsonify({'error': 'Invalid authid in query'})
+            response.headers['X-Reason'] = 'Invalid authid in query'
+            response.status_code = 400
+            return response
 
-    def handle_v2(self, inputfragment):
-        servicetype = 'Unknown'
+        servicetype = inputfragment[:inputfragment.index(':')]
+        refresh_token = inputfragment[inputfragment.index(':') + 1:]
+
+        service = find_service(servicetype)
+        if service is None:
+            raise Exception('No such service')
+
+        if refresh_token is None or len(refresh_token.strip()) == 0:
+            raise Exception('No token provided')
+
+        tokenhash = hashlib.md5(refresh_token).hexdigest()
+
+        if settings.RATE_LIMIT > 0:
+
+            ratelimiturl = '/ratelimit?id=' + tokenhash + '&adr=' + request.remote_addr
+            ratelimit = memcache.get(ratelimiturl)
+
+            if ratelimit is None:
+                memcache.add(key=ratelimiturl, value=1, time=60 * 60)
+            elif ratelimit > settings.RATE_LIMIT:
+                logging.info('Rate limit response to: %s', tokenhash)
+                response = jsonify({'error': 'Too many requests for this key, wait 60 minutes'})
+                response.headers['X-Reason'] = 'Too many requests for this key, wait 60 minutes'
+                response.status_code = 503
+                return response
+            else:
+                memcache.incr(ratelimiturl)
+
+        cacheurl = '/v2/refresh?id=' + tokenhash
+
+        cached_res = memcache.get(cacheurl)
+        if cached_res is not None and type(cached_res) != type(''):
+            exp_secs = (int)((cached_res['expires'] - datetime.datetime.now(datetime.timezone.utc)).total_seconds())
+
+            if exp_secs > 30:
+                logging.info('Serving cached response to: %s, expires in %s secs', tokenhash, exp_secs)
+                return jsonify({
+                    'access_token': cached_res['access_token'],
+                    'expires': exp_secs,
+                    'type': cached_res['type']
+                })
+            else:
+                logging.info('Cached response to: %s is invalid because it expires in %s', tokenhash, exp_secs)
+
+        url = service['auth-url']
+        request_params = {
+            'client_id': service['client-id'],
+            'grant_type': 'refresh_token',
+            'refresh_token': refresh_token
+        }
+        if "client-secret" in service:
+            request_params['client_secret'] = service['client-secret']
+        if "redirect-uri" in service:
+            request_params['redirect_uri'] = service['redirect-uri']
+
+        data = urllib.parse.urlencode(request_params)
+
         try:
-            if inputfragment.find(':') <= 0:
-                self.response.headers['X-Reason'] = 'Invalid authid in query'
-                self.response.set_status(400, 'Invalid authid in query')
-                return
+            req = requests.post(url, data=data, timeout=20)
+            req.raise_for_status()
+            content = req.content
+        except requests.HTTPError as err:
+            logging.info('ERR-CODE: ' + str(err.response.status_code))
+            logging.info('ERR-BODY: ' + err.response.text)
+            raise err
 
-            servicetype = inputfragment[:inputfragment.index(':')]
-            refresh_token = inputfragment[inputfragment.index(':') + 1:]
+        resp = json.loads(content)
+        exp_secs = int(resp["expires_in"])
+        expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=exp_secs)
 
-            service = find_service(servicetype)
-            if service is None:
-                raise Exception('No such service')
+        cached_res = {
+            'access_token': resp['access_token'],
+            'expires': expires,
+            'type': servicetype
+        }
 
-            if refresh_token is None or len(refresh_token.strip()) == 0:
-                raise Exception('No token provided')
+        memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
+        logging.info('Caching response to: %s for %s secs, service: %s', tokenhash, exp_secs - 10, servicetype)
 
-            tokenhash = hashlib.md5(refresh_token).hexdigest()
+        # Write the result back to the client
+        return jsonify({
+            'access_token': resp['access_token'],
+            'expires': exp_secs,
+            'type': servicetype
+        })
 
-            if settings.RATE_LIMIT > 0:
-
-                ratelimiturl = '/ratelimit?id=' + tokenhash + '&adr=' + self.request.remote_addr
-                ratelimit = memcache.get(ratelimiturl)
-
-                if ratelimit is None:
-                    memcache.add(key=ratelimiturl, value=1, time=60 * 60)
-                elif ratelimit > settings.RATE_LIMIT:
-                    logging.info('Rate limit response to: %s', tokenhash)
-                    self.response.headers['X-Reason'] = 'Too many request for this key, wait 60 minutes'
-                    self.response.set_status(503, 'Too many request for this key, wait 60 minutes')
-                    return
-                else:
-                    memcache.incr(ratelimiturl)
-
-            cacheurl = '/v2/refresh?id=' + tokenhash
-
-            cached_res = memcache.get(cacheurl)
-            if cached_res is not None and type(cached_res) != type(''):
-                exp_secs = (int)((cached_res['expires'] - datetime.datetime.utcnow()).total_seconds())
-
-                if exp_secs > 30:
-                    logging.info('Serving cached response to: %s, expires in %s secs', tokenhash, exp_secs)
-                    self.response.write(json.dumps(
-                        {'access_token': cached_res['access_token'], 'expires': exp_secs, 'type': cached_res['type']}))
-                    return
-                else:
-                    logging.info('Cached response to: %s is invalid because it expires in %s', tokenhash, exp_secs)
-
-            url = service['auth-url']
-            request_params = {
-                'client_id': service['client-id'],
-                'grant_type': 'refresh_token',
-                'refresh_token': refresh_token
-            }
-            if service.has_key("client-secret"):
-                request_params['client_secret'] = service['client-secret']
-            if service.has_key("redirect-uri"):
-                request_params['redirect_uri'] = service['redirect-uri']
-
-            data = urllib.urlencode(request_params)
-
-            urlfetch.set_default_fetch_deadline(20)
-
-            req = urllib2.Request(url, data, {'Content-Type': 'application/x-www-form-urlencoded'})
-            f = urllib2.urlopen(req)
-            content = f.read()
-            f.close()
-
-            resp = json.loads(content)
-            exp_secs = int(resp["expires_in"])
-            expires = datetime.datetime.utcnow() + datetime.timedelta(seconds=exp_secs)
-
-            cached_res = {'access_token': resp['access_token'], 'expires': expires, 'type': servicetype}
-
-            memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
-            logging.info('Caching response to: %s for %s secs, service: %s', tokenhash, exp_secs - 10, servicetype)
-
-            # Write the result back to the client
-            self.response.write(
-                json.dumps({'access_token': resp['access_token'], 'expires': exp_secs, 'type': servicetype}))
-
-        except:
-            logging.exception('handler error for ' + servicetype)
-            self.response.headers['X-Reason'] = 'Server error'
-            self.response.set_status(500, 'Server error')
+    except:
+        logging.exception('handler error for ' + servicetype)
+        response = jsonify({'error': 'Server error'})
+        response.headers['X-Reason'] = 'Server error'
+        response.status_code = 500
 
 
-class RevokeHandler(webapp2.RequestHandler):
+@app.route('/revoke', methods=['GET'])
+def revoke():
     """Renders the revoke.html page"""
 
-    def get(self):
-        template_values = {
-            'appname': settings.SERVICE_DISPLAYNAME
-        }
+    template_values = {
+        'appname': settings.SERVICE_DISPLAYNAME
+    }
 
-        template = JINJA_ENVIRONMENT.get_template('revoke.html')
-        self.response.write(template.render(template_values))
+    return render_template('revoke.html', appname=settings.SERVICE_DISPLAYNAME)
 
 
-class RevokedHandler(webapp2.RequestHandler):
+@app.route('/revoked', methods=['POST'])
+def revoked():
     """Revokes an issued auth token, and renders the revoked.html page"""
 
-    def do_revoke(self):
+    result = revoked_do_revoke()
+
+    template_values = {
+        'result': result,
+        'appname': settings.SERVICE_DISPLAYNAME
+    }
+
+    return render_template('revoked.html', **template_values)
+
+def revoked_do_revoke():
+    try:
+        authid = request.form.get('authid')
+        if authid is None or authid == '':
+            return "Error: No authid in query"
+
+        if authid.find(':') <= 0:
+            return 'Error: Invalid authid in query'
+
+        keyid = authid[:authid.index(':')]
+        password = authid[authid.index(':') + 1:]
+
+        if keyid == 'v2':
+            return 'Error: The token must be revoked from the service provider. You can de-authorize the application on the storage providers website.'
+
+        with dbclient.context():
+            entry = ndb.Key(dbmodel.AuthToken, keyid).get()
+        if entry is None:
+            return 'Error: No such user'
+
+        data = base64.b64decode(entry.blob)
+        resp = None
+
         try:
-            authid = self.request.get('authid')
-            if authid is None or authid == '':
-                return "Error: No authid in query"
-
-            if authid.find(':') <= 0:
-                return 'Error: Invalid authid in query'
-
-            keyid = authid[:authid.index(':')]
-            password = authid[authid.index(':') + 1:]
-
-            if keyid == 'v2':
-                return 'Error: The token must be revoked from the service provider. You can de-authorize the application on the storage providers website.'
-
-            entry = dbmodel.AuthToken.get_by_key_name(keyid)
-            if entry is None:
-                return 'Error: No such user'
-
-            data = base64.b64decode(entry.blob)
-            resp = None
-
-            try:
-                resp = json.loads(simplecrypt.decrypt(password, data).decode('utf8'))
-            except:
-                logging.exception('decrypt error')
-                return 'Error: Invalid authid password'
-
-            entry.delete()
-            return "Token revoked"
-
+            resp = json.loads(simplecrypt.decrypt(password, data).decode('utf8'))
         except:
-            logging.exception('handler error')
-            return 'Error: Server error'
+            logging.exception('decrypt error')
+            return 'Error: Invalid authid password'
 
-    def post(self):
-        result = self.do_revoke()
+        with dbclient.context():
+            entry.key.delete()
+        return "Token revoked"
 
-        template_values = {
-            'result': result,
-            'appname': settings.SERVICE_DISPLAYNAME
-        }
-
-        template = JINJA_ENVIRONMENT.get_template('revoked.html')
-        self.response.write(template.render(template_values))
+    except:
+        logging.exception('handler error')
+        return 'Error: Server error'
 
 
-class CleanupHandler(webapp2.RequestHandler):
+@app.route('/cleanup', methods=['GET'])
+def cleanup():
     """Cron activated page that expires old items from the database"""
 
-    def get(self):
+    n_fetch = 0
+    n_state = 0
+    n_year = 0
+
+    with dbclient.context():
         # Delete all expired fetch tokens
-        for n in dbmodel.FetchToken.gql('WHERE expires < :1', datetime.datetime.utcnow()):
-            n.delete()
+        for n in dbmodel.FetchToken.query(dbmodel.FetchToken.expires < datetime.datetime.now(datetime.timezone.utc)):
+            n_fetch += 1
+            n.key.delete()
 
         # Delete all expired state tokens
-        for n in dbmodel.StateToken.gql('WHERE expires < :1', datetime.datetime.utcnow()):
-            n.delete()
+        for n in dbmodel.StateToken.query(dbmodel.StateToken.expires < datetime.datetime.now(datetime.timezone.utc)):
+            n_state += 1
+            n.key.delete()
 
         # Delete all tokens not having seen use in a year
-        for n in dbmodel.AuthToken.gql('WHERE expires < :1',
-                                       (datetime.datetime.utcnow() + datetime.timedelta(days=-365))):
-            n.delete()
+        one_year_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=365)
+        for n in dbmodel.AuthToken.query(dbmodel.AuthToken.expires < one_year_ago):
+            n_year += 1
+            n.key.delete()
+
+    return f'Cleanup done, removed {n_fetch} fetch tokens, {n_state} state tokens, and {n_year} auth tokens.'
 
 
-class ExportHandler(webapp2.RequestHandler):
+@app.route('/export', methods=['GET'])
+def export():
     """
     Handler that exports the refresh token,
     for use by the backend handlers
     """
+    try:
+        if len(settings.API_KEY) < 10 or request.headers['X-APIKey'] != settings.API_KEY:
 
-    def get(self):
+            if len(settings.API_KEY) < 10:
+                logging.info('No api key loaded')
 
+            response = jsonify({'error': 'Invalid API key'})
+            response.headers['X-Reason'] = 'Invalid API key'
+            response.status_code = 403
+            return response
+
+        authid = request.headers['X-AuthID']
+
+        if authid is None or authid == '':
+            response = jsonify({'error': 'No authid in query'})
+            response.headers['X-Reason'] = 'No authid in query'
+            response.status_code = 400
+            return response
+
+        if authid.find(':') <= 0:
+            response = jsonify({'error': 'Invalid authid in query'})
+            response.headers['X-Reason'] = 'Invalid authid in query'
+            response.status_code = 400
+            return response
+
+        keyid = authid[:authid.index(':')]
+        password = authid[authid.index(':') + 1:]
+
+        if keyid == 'v2':
+            response = jsonify({'error': 'No v2 export possible'})
+            response.headers['X-Reason'] = 'No v2 export possible'
+            response.status_code = 400
+            return response
+
+        # Find the entry
+        with dbclient.context():
+            entry = ndb.Key(dbmodel.AuthToken, keyid).get()
+        if entry is None:
+            response = jsonify({'error': 'No such key'})
+            response.headers['X-Reason'] = 'No such key'
+            response.status_code = 404
+            return response
+
+        # Decode
+        data = base64.b64decode(entry.blob)
+        resp = None
+
+        # Decrypt
         try:
-            if len(settings.API_KEY) < 10 or self.request.headers['X-APIKey'] != settings.API_KEY:
-
-                if len(settings.API_KEY) < 10:
-                    logging.info('No api key loaded')
-
-                self.response.headers['X-Reason'] = 'Invalid API key'
-                self.response.set_status(403, 'Invalid API key')
-                return
-
-            authid = self.request.headers['X-AuthID']
-
-            if authid is None or authid == '':
-                self.response.headers['X-Reason'] = 'No authid in query'
-                self.response.set_status(400, 'No authid in query')
-                return
-
-            if authid.find(':') <= 0:
-                self.response.headers['X-Reason'] = 'Invalid authid in query'
-                self.response.set_status(400, 'Invalid authid in query')
-                return
-
-            keyid = authid[:authid.index(':')]
-            password = authid[authid.index(':') + 1:]
-
-            if keyid == 'v2':
-                self.response.headers['X-Reason'] = 'No v2 export possible'
-                self.response.set_status(400, 'No v2 export possible')
-                return
-
-            # Find the entry
-            entry = dbmodel.AuthToken.get_by_key_name(keyid)
-            if entry is None:
-                self.response.headers['X-Reason'] = 'No such key'
-                self.response.set_status(404, 'No such key')
-                return
-
-            # Decode
-            data = base64.b64decode(entry.blob)
-            resp = None
-
-            # Decrypt
-            try:
-                resp = json.loads(simplecrypt.decrypt(password, data).decode('utf8'))
-            except:
-                logging.exception('decrypt error')
-                self.response.headers['X-Reason'] = 'Invalid authid password'
-                self.response.set_status(400, 'Invalid authid password')
-                return
-
-            resp['service'] = entry.service
-
-            logging.info('Exported %s bytes for keyid %s', len(json.dumps(resp)), keyid)
-
-            # Write the result back to the client
-            self.response.headers['Content-Type'] = 'application/json'
-            self.response.write(json.dumps(resp))
+            resp = json.loads(simplecrypt.decrypt(password, data).decode('utf8'))
         except:
-            logging.exception('handler error')
-            self.response.headers['X-Reason'] = 'Server error'
-            self.response.set_status(500, 'Server error')
+            logging.exception('decrypt error')
+            response = jsonify({'error': 'Invalid authid password'})
+            response.headers['X-Reason'] = 'Invalid authid password'
+            response.status_code = 400
+            return response
+
+        resp['service'] = entry.service
+
+        logging.info('Exported %s bytes for keyid %s', len(json.dumps(resp)), keyid)
+
+        # Write the result back to the client
+        response = jsonify(resp)
+        response.headers['Content-Type'] = 'application/json'
+        return response
+    except:
+        logging.exception('handler error')
+        response = jsonify({'error': 'Server error'})
+        response.headers['X-Reason'] = 'Server error'
+        response.status_code = 500
+        return response
 
 
-class ImportHandler(webapp2.RequestHandler):
+@app.route('/import', methods=['POST'])
+def import_handler():
     """
     Handler that imports the refresh token,
     for use by the backend handlers
     """
+    try:
+        if len(settings.API_KEY) < 10 or request.headers['X-APIKey'] != settings.API_KEY:
+            response = jsonify({'error': 'Invalid API key'})
+            response.headers['X-Reason'] = 'Invalid API key'
+            response.status_code = 403
+            return response
 
-    def post(self):
+        authid = request.headers['X-AuthID']
 
+        if authid is None or authid == '':
+            response = jsonify({'error': 'No authid in query'})
+            response.headers['X-Reason'] = 'No authid in query'
+            response.status_code = 400
+            return response
+
+        if authid.find(':') <= 0:
+            response = jsonify({'error': 'Invalid authid in query'})
+            response.headers['X-Reason'] = 'Invalid authid in query'
+            response.status_code = 400
+            return response
+
+        keyid = authid[:authid.index(':')]
+        password = authid[authid.index(':') + 1:]
+
+        if keyid == 'v2':
+            response = jsonify({'error': 'No v2 import possible'})
+            response.headers['X-Reason'] = 'No v2 import possible'
+            response.status_code = 400
+            return response
+
+        # Find the entry
+        with dbclient.context():
+            entry = ndb.Key(dbmodel.AuthToken, keyid).get()
+        if entry is None:
+            response = jsonify({'error': 'No such key'})
+            response.headers['X-Reason'] = 'No such key'
+            response.status_code = 404
+            return response
+
+        # Decode
+        data = base64.b64decode(entry.blob)
+        resp = None
+
+        # Decrypt
         try:
-            if len(settings.API_KEY) < 10 or self.request.headers['X-APIKey'] != settings.API_KEY:
-                self.response.headers['X-Reason'] = 'Invalid API key'
-                self.response.set_status(403, 'Invalid API key')
-                return
-
-            authid = self.request.headers['X-AuthID']
-
-            if authid is None or authid == '':
-                self.response.headers['X-Reason'] = 'No authid in query'
-                self.response.set_status(400, 'No authid in query')
-                return
-
-            if authid.find(':') <= 0:
-                self.response.headers['X-Reason'] = 'Invalid authid in query'
-                self.response.set_status(400, 'Invalid authid in query')
-                return
-
-            keyid = authid[:authid.index(':')]
-            password = authid[authid.index(':') + 1:]
-
-            if keyid == 'v2':
-                self.response.headers['X-Reason'] = 'No v2 import possible'
-                self.response.set_status(400, 'No v2 import possible')
-                return
-
-            # Find the entry
-            entry = dbmodel.AuthToken.get_by_key_name(keyid)
-            if entry is None:
-                self.response.headers['X-Reason'] = 'No such key'
-                self.response.set_status(404, 'No such key')
-                return
-
-            # Decode
-            data = base64.b64decode(entry.blob)
-            resp = None
-
-            # Decrypt
-            try:
-                resp = json.loads(simplecrypt.decrypt(password, data).decode('utf8'))
-            except:
-                logging.exception('decrypt error')
-                self.response.headers['X-Reason'] = 'Invalid authid password'
-                self.response.set_status(400, 'Invalid authid password')
-                return
-
-            resp = json.loads(self.request.body)
-            if not 'refresh_token' in resp:
-                logging.info('Import blob does not contain a refresh token')
-                self.response.headers['X-Reason'] = 'Import blob does not contain a refresh token'
-                self.response.set_status(400, 'Import blob does not contain a refresh token')
-                return
-
-            if not 'expires_in' in resp:
-                logging.info('Import blob does not contain expires_in')
-                self.response.headers['X-Reason'] = 'Import blob does not contain expires_in'
-                self.response.set_status(400, 'Import blob does not contain expires_in')
-                return
-
-            logging.info('Imported %s bytes for keyid %s', len(json.dumps(resp)), keyid)
-
-            resp['service'] = entry.service
-            exp_secs = int(resp['expires_in']) - 10
-
-            cipher = simplecrypt.encrypt(password, json.dumps(resp))
-            entry.expires = datetime.datetime.utcnow() + datetime.timedelta(seconds=exp_secs)
-            entry.blob = base64.b64encode(cipher)
-            entry.put()
-
-            # Write the result back to the client
-            self.response.headers['Content-Type'] = 'application/json'
-            self.response.write(json.dumps(resp))
+            resp = json.loads(simplecrypt.decrypt(password, data).decode('utf8'))
         except:
-            logging.exception('handler error')
-            self.response.headers['X-Reason'] = 'Server error'
-            self.response.set_status(500, 'Server error')
+            logging.exception('decrypt error')
+            response = jsonify({'error': 'Invalid authid password'})
+            response.headers['X-Reason'] = 'Invalid authid password'
+            response.status_code = 400
+            return response
+
+        resp = request.get_json()
+        if not 'refresh_token' in resp:
+            logging.info('Import blob does not contain a refresh token')
+            response = jsonify({'error': 'Import blob does not contain a refresh token'})
+            response.headers['X-Reason'] = 'Import blob does not contain a refresh token'
+            response.status_code = 400
+            return response
+
+        if not 'expires_in' in resp:
+            logging.info('Import blob does not contain expires_in')
+            response = jsonify({'error': 'Import blob does not contain expires_in'})
+            response.headers['X-Reason'] = 'Import blob does not contain expires_in'
+            response.status_code = 400
+            return response
+
+        logging.info('Imported %s bytes for keyid %s', len(json.dumps(resp)), keyid)
+
+        resp['service'] = entry.service
+        exp_secs = int(resp['expires_in']) - 10
+
+        cipher = simplecrypt.encrypt(password, json.dumps(resp))
+        entry.expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=exp_secs)
+        entry.blob = base64.b64encode(cipher)
+        entry.put()
+
+        # Write the result back to the client
+        response = jsonify(resp)
+        response.headers['Content-Type'] = 'application/json'
+        return response
+    except:
+        logging.exception('handler error')
+        response = jsonify({'error': 'Server error'})
+        response.headers['X-Reason'] = 'Server error'
+        response.status_code = 500
+        return response
 
 
-class CheckAliveHandler(webapp2.RequestHandler):
+@app.route('/checkalive', methods=['GET'])
+def check_alive():
     """
     Handler that exports the refresh token,
     for use by the backend handlers
     """
 
-    def get(self):
-        if settings.WORKER_URLS is None:
-            return
+    if settings.WORKER_URLS is None:
+        return
 
-        data = '%030x' % random.randrange(16 ** 32)
+    data = '%030x' % random.randrange(16 ** 32)
 
-        validhosts = []
+    validhosts = []
 
-        for n in settings.WORKER_URLS:
-            try:
-                url = n[:-len("refresh")] + "isalive?data=" + data
-                logging.info('Checking if server is alive: %s', url)
+    for n in settings.WORKER_URLS:
+        try:
+            url = n[:-len("refresh")] + "isalive?data=" + data
+            logging.info('Checking if server is alive: %s', url)
 
-                req = urllib2.Request(url)
-                f = urllib2.urlopen(req)
-                content = f.read()
-                f.close()
+            req = requests.post(url, data=data, timeout=20)
+            req.raise_for_status()
+            content = req.content
 
-                resp = json.loads(content)
-                if resp["data"] != data:
-                    logging.info('Bad response, was %s, should have been %s', resp['data'], data)
-                else:
-                    validhosts.append(n)
-            except:
-                logging.exception('handler error')
+            resp = json.loads(content)
+            if resp["data"] != data:
+                logging.info('Bad response, was %s, should have been %s', resp['data'], data)
+            else:
+                validhosts.append(n)
+        except:
+            logging.exception('handler error')
 
-        logging.info('Valid hosts are: %s', validhosts)
+    logging.info('Valid hosts are: %s', validhosts)
 
-        memcache.add(key='worker-urls', value=validhosts, time=60 * 60 * 1)
+    memcache.add(key='worker-urls', value=validhosts, time=60 * 60)
 
-
-app = webapp2.WSGIApplication([
-    ('/logged-in', LoginHandler),
-    ('/login', RedirectToLoginHandler),
-    ('/cli-token', CliTokenHandler),
-    ('/cli-token-login', CliTokenLoginHandler),
-    ('/refresh', RefreshHandler),
-    ('/fetch', FetchHandler),
-    ('/token-state', TokenStateHandler),
-    ('/revoked', RevokedHandler),
-    ('/revoke', RevokeHandler),
-    ('/cleanup', CleanupHandler),
-    ('/export', ExportHandler),
-    ('/import', ImportHandler),
-    ('/checkalive', CheckAliveHandler),
-    (r'/.*', IndexHandler)
-], debug=settings.TESTING)
+if __name__ == '__main__':
+    app.run(debug=settings.TESTING)

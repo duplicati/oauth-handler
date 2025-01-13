@@ -1,6 +1,4 @@
-runtime: python27
-api_version: 1
-threadsafe: no
+runtime: python312
 
 instance_class: F1
 automatic_scaling:
@@ -33,13 +31,3 @@ handlers:
 
 - url: .*
   script: main.app
-
-libraries:
-- name: webapp2
-  version: latest
-- name: jinja2
-  version: latest
-- name: django
-  version: latest
-- name: pycrypto
-  version: latest

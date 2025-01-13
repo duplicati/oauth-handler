@@ -1,46 +1,45 @@
 import datetime
 
-from google.appengine.ext import db
+from google.cloud import ndb
 
-
-class AuthToken(db.Model):
+class AuthToken(ndb.Model):
     """Representation of a stored authid"""
-    user_id = db.StringProperty(required=True)
-    blob = db.TextProperty(required=True)
-    expires = db.DateTimeProperty(required=True)
-    service = db.StringProperty(required=True)
+    user_id = ndb.StringProperty(required=True)
+    blob = ndb.TextProperty(required=True)
+    expires = ndb.DateTimeProperty(required=True, tzinfo=datetime.timezone.utc)
+    service = ndb.StringProperty(required=True)
 
 
-class FetchToken(db.Model):
+class FetchToken(ndb.Model):
     """Representation of a stored fetch token"""
-    authid = db.StringProperty(required=False)
-    token = db.StringProperty(required=True)
-    expires = db.DateTimeProperty(required=True)
-    fetched = db.BooleanProperty(required=True)
+    authid = ndb.StringProperty(required=False)
+    token = ndb.StringProperty(required=True)
+    expires = ndb.DateTimeProperty(required=True, tzinfo=datetime.timezone.utc)
+    fetched = ndb.BooleanProperty(required=True)
 
 
-class StateToken(db.Model):
+class StateToken(ndb.Model):
     """Representation of a stored state token"""
-    service = db.StringProperty(required=True)
-    expires = db.DateTimeProperty(required=True)
-    fetchtoken = db.StringProperty(required=False)
-    version = db.IntegerProperty(required=False)
+    service = ndb.StringProperty(required=True)
+    expires = ndb.DateTimeProperty(required=True, tzinfo=datetime.timezone.utc)
+    fetchtoken = ndb.StringProperty(required=False)
+    version = ndb.IntegerProperty(required=False)
 
 
-@db.transactional(xg=True)
+@ndb.transactional(xg=True)
 def create_fetch_token(fetchtoken):
     # A fetch token stays active for 30 minutes
     if fetchtoken is not None and fetchtoken != '':
-        e = FetchToken.get_by_key_name(fetchtoken)
+        e = FetchToken.get_by_id(fetchtoken)
         if e is None:
-            FetchToken(key_name=fetchtoken, token=fetchtoken, fetched=False,
+            FetchToken(id=fetchtoken, token=fetchtoken, fetched=False,
                        expires=datetime.datetime.utcnow() + datetime.timedelta(minutes=5)).put()
 
 
-@db.transactional(xg=True)
+@ndb.transactional(xg=True)
 def update_fetch_token(fetchtoken, authid):
     if fetchtoken is not None and fetchtoken != '':
-        e = FetchToken.get_by_key_name(fetchtoken)
+        e = FetchToken.get_by_id(fetchtoken)
         if e is not None:
             e.expires = datetime.datetime.utcnow() + datetime.timedelta(seconds=30)
             e.authid = authid
@@ -48,24 +47,21 @@ def update_fetch_token(fetchtoken, authid):
             e.put()
 
 
-@db.transactional
+@ndb.transactional()
 def insert_new_authtoken(keyid, user_id, blob, expires, service):
-    entry = AuthToken.get_by_key_name(keyid)
+    entry = AuthToken.get_by_id(keyid)
     if entry is None:
-
-        entry = AuthToken(key_name=keyid, user_id=user_id, blob=blob, expires=expires, service=service)
+        entry = AuthToken(id=keyid, user_id=user_id, blob=blob, expires=expires, service=service)
         entry.put()
-
         return entry
     else:
         return None
 
 
-@db.transactional(xg=True)
+@ndb.transactional(xg=True)
 def insert_new_statetoken(token, service, fetchtoken, version):
-    entry = StateToken.get_by_key_name(token)
+    entry = StateToken.get_by_id(token)
     if entry is None:
-
         tokenversion = None
         try:
             tokenversion = int(version)
@@ -73,14 +69,13 @@ def insert_new_statetoken(token, service, fetchtoken, version):
             pass
 
         entry = StateToken(
-            key_name=token,
+            id=token,
             service=service,
             fetchtoken=fetchtoken,
             expires=datetime.datetime.utcnow() + datetime.timedelta(minutes=5),
             version=tokenversion)
 
         entry.put()
-
         return entry
     else:
         return None
