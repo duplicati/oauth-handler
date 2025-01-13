@@ -5,6 +5,7 @@ import datetime
 import hashlib
 import json
 import logging
+import google.cloud.logging
 import random
 import requests
 import urllib.parse
@@ -21,12 +22,14 @@ import simplecrypt
 app = Flask(__name__)
 app.wsgi_app = wrap_wsgi_app(app.wsgi_app)
 dbclient = ndb.Client()
-
+logging.basicConfig(level=logging.INFO)
+client = google.cloud.logging.Client()
+client.setup_logging()
 
 def find_provider_and_service(id):
     providers = [n for n in settings.SERVICES if n['id'] == id]
     if len(providers) != 1:
-        raise Exception('No such provider: ' + id)
+        raise Exception(f'No such provider: {id}')
 
     provider = providers[0]
     return provider, settings.LOOKUP[provider['type']]
@@ -249,7 +252,7 @@ def login():
         data = urllib.parse.urlencode(request_params)
 
         if settings.TESTING:
-            logging.info('REQ RAW:' + data)
+            logging.info(f'REQ RAW: {data}')
 
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
 
@@ -263,8 +266,9 @@ def login():
             response.raise_for_status()
             content = response.content
         except requests.HTTPError as err:
-            logging.info('ERR-CODE: ' + str(err.response.status_code))
-            logging.info('ERR-BODY: ' + err.response.text)
+            logging.error(f'PROVIDER: {service['id']}, {url}')
+            logging.error(f'ERR-CODE: {err.response.status_code}')
+            logging.error(f'ERR-BODY: {err.response.text}')
             raise err
 
         if settings.TESTING:
@@ -300,7 +304,7 @@ def login():
             if 'deauthlink' in provider:
                 template_values = {
                     'service': display,
-                    'authid': 'Server error, you must de-authorize ' + settings.APP_NAME,
+                    'authid': f'Server error, you must de-authorize {settings.APP_NAME}',
                     'showdeauthlink': 'true',
                     'deauthlink': provider['deauthlink'],
                     'fetchtoken': ''
@@ -362,7 +366,7 @@ def login():
         return render_template('logged-in.html', **template_values)
 
     except:
-        logging.exception('handler error for ' + display)
+        logging.exception(f'handler error for {display}')
         error_code = request.args.get('error', None)
         error_desc = request.args.get('error_description', None)
         if error_code is not None:
@@ -463,7 +467,7 @@ def cli_token_login():
         return render_template('logged-in.html', **template_values)
 
     except:
-        logging.exception('handler error for ' + display)
+        logging.exception(f'handler error for {display}')
 
         template_values = {
             'service': display,
@@ -490,17 +494,17 @@ def fetch():
 
         with dbclient.context():
             entry = ndb.Key(dbmodel.FetchToken, fetchtoken).get()
-        if entry is None:
-            return jsonify({'error': 'No such entry'})
+            if entry is None:
+                return jsonify({'error': 'No such entry'})
 
-        if entry.expires < datetime.datetime.now(datetime.timezone.utc):
-            return jsonify({'error': 'No such entry'})
+            if entry.expires < datetime.datetime.now(datetime.timezone.utc):
+                return jsonify({'error': 'No such entry'})
 
-        if entry.authid is None or entry.authid == '':
-            return jsonify({'wait': 'Not ready'})
+            if entry.authid is None or entry.authid == '':
+                return jsonify({'wait': 'Not ready'})
 
-        entry.fetched = True
-        entry.put()
+            entry.fetched = True
+            entry.put()
 
         return jsonify({'authid': entry.authid})
     except:
@@ -672,8 +676,9 @@ def refresh_handler():
                 req.raise_for_status()
                 content = req.content
             except requests.HTTPError as err:
-                logging.info('ERR-CODE: ' + str(err.response.status_code))
-                logging.info('ERR-BODY: ' + err.response.text)
+                logging.error(f'PROVIDER: {service['id']}, {url}')
+                logging.error(f'ERR-CODE: {err.response.status_code}')
+                logging.error(f'ERR-BODY: {err.response.text}')
                 raise err
 
             # Store the old refresh_token as some servers do not send it again
@@ -706,7 +711,7 @@ def refresh_handler():
             'v2_authid': 'v2:' + entry.service + ':' + rt
         })
     except:
-        logging.exception('handler error for ' + servicetype)
+        logging.exception(f'handler error for {servicetype}')
         response = jsonify({'error': 'Server error'})
         response.headers['X-Reason'] = 'Server error'
         response.status_code = 500
@@ -735,7 +740,7 @@ def refresh_handle_v2(inputfragment):
         if refresh_token is None or len(refresh_token.strip()) == 0:
             raise Exception('No token provided')
 
-        tokenhash = hashlib.md5(refresh_token).hexdigest()
+        tokenhash = hashlib.sha256(refresh_token.encode('utf-8')).hexdigest()
 
         if settings.RATE_LIMIT > 0:
 
@@ -786,9 +791,10 @@ def refresh_handle_v2(inputfragment):
             req = requests.post(url, data=data, timeout=20)
             req.raise_for_status()
             content = req.content
-        except requests.HTTPError as err:
-            logging.info('ERR-CODE: ' + str(err.response.status_code))
-            logging.info('ERR-BODY: ' + err.response.text)
+        except requests.HTTPError as err:            
+            logging.error(f'PROVIDER: {service['id']}, {url}')
+            logging.error(f'ERR-CODE: {err.response.status_code}')
+            logging.error(f'ERR-BODY: {err.response.text}')
             raise err
 
         resp = json.loads(content)
@@ -812,7 +818,7 @@ def refresh_handle_v2(inputfragment):
         })
 
     except:
-        logging.exception('handler error for ' + servicetype)
+        logging.exception(f'handler error for {servicetype}')
         response = jsonify({'error': 'Server error'})
         response.headers['X-Reason'] = 'Server error'
         response.status_code = 500
