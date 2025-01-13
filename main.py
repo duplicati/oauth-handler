@@ -266,7 +266,7 @@ def login():
             response.raise_for_status()
             content = response.content
         except requests.HTTPError as err:
-            logging.error(f'PROVIDER: {service['id']}, {url}')
+            logging.error(f'PROVIDER: {display}, {url}')
             logging.error(f'ERR-CODE: {err.response.status_code}')
             logging.error(f'ERR-BODY: {err.response.text}')
             raise err
@@ -676,7 +676,7 @@ def refresh_handler():
                 req.raise_for_status()
                 content = req.content
             except requests.HTTPError as err:
-                logging.error(f'PROVIDER: {service['id']}, {url}')
+                logging.error(f'PROVIDER: {servicetype}, {url}')
                 logging.error(f'ERR-CODE: {err.response.status_code}')
                 logging.error(f'ERR-BODY: {err.response.text}')
                 raise err
@@ -792,7 +792,7 @@ def refresh_handle_v2(inputfragment):
             req.raise_for_status()
             content = req.content
         except requests.HTTPError as err:            
-            logging.error(f'PROVIDER: {service['id']}, {url}')
+            logging.error(f'PROVIDER: {servicetype}, {url}')
             logging.error(f'ERR-CODE: {err.response.status_code}')
             logging.error(f'ERR-BODY: {err.response.text}')
             raise err
