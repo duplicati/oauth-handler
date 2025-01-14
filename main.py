@@ -26,6 +26,14 @@ logging.basicConfig(level=logging.INFO)
 client = google.cloud.logging.Client()
 client.setup_logging()
 
+def ndb_wsgi_middleware(wsgi_app):
+    def middleware(environ, start_response):
+        with dbclient.context():
+            return wsgi_app(environ, start_response)
+    return middleware
+
+app.wsgi_app = ndb_wsgi_middleware(app.wsgi_app)
+
 def find_provider_and_service(id):
     providers = [n for n in settings.SERVICES if n['id'] == id]
     if len(providers) != 1:
@@ -73,8 +81,7 @@ def create_authtoken(provider_id, token):
     # Find a random un-used user ID, and store the encrypted data
     while entry is None:
         keyid = '%030x' % random.randrange(16 ** 32)
-        with dbclient.context():
-            entry = dbmodel.insert_new_authtoken(keyid, user_id, b64_cipher, expires, provider_id)
+        entry = dbmodel.insert_new_authtoken(keyid, user_id, b64_cipher, expires, provider_id)
 
     # Return the keyid and authid
     return keyid, keyid + ':' + password
@@ -91,8 +98,7 @@ def redirect_to_login():
         stateentry = None
         while stateentry is None:
             statetoken = '%030x' % random.randrange(16 ** 32)
-            with dbclient.context():
-                stateentry = dbmodel.insert_new_statetoken(statetoken, provider['id'], request.args.get('token', None),
+            stateentry = dbmodel.insert_new_statetoken(statetoken, provider['id'], request.args.get('token', None),
                                                     request.args.get('tokenversion', None))
 
         link = service['login-url']
@@ -126,8 +132,7 @@ def index(path):
     #  so the caller can grab the authid automatically
     token = request.args.get('token', None)
     if token is not None:
-        with dbclient.context():
-            dbmodel.create_fetch_token(token)
+        dbmodel.create_fetch_token(token)
         if settings.TESTING:
             logging.info('Created redir with token %s', token)
 
@@ -213,8 +218,7 @@ def login():
         if state is None or code is None:
             raise Exception('Response is missing state or code')
 
-        with dbclient.context():
-            statetoken = ndb.Key(dbmodel.StateToken, state).get()
+        statetoken = ndb.Key(dbmodel.StateToken, state).get()
         if statetoken is None:
             raise Exception('No such state found')
 
@@ -280,8 +284,7 @@ def login():
         # If this is a service that does not use refresh tokens,
         # we just return the access token to the caller
         if 'no-refresh-tokens' in service and service['no-refresh-tokens']:
-            with dbclient.context():
-                dbmodel.update_fetch_token(statetoken.fetchtoken, resp['access_token'])
+            dbmodel.update_fetch_token(statetoken.fetchtoken, resp['access_token'])
 
             # Report results to the user
             template_values = {
@@ -292,8 +295,7 @@ def login():
                 'fetchtoken': statetoken.fetchtoken
             }
 
-            with dbclient.context():
-                statetoken.key.delete()
+            statetoken.key.delete()
             logging.info('Returned access token for service %s', provider['id'])
 
             return render_template('logged-in.html', **template_values)
@@ -310,8 +312,7 @@ def login():
                     'fetchtoken': ''
                 }
 
-                with dbclient.context():
-                    statetoken.key.delete()
+                statetoken.key.delete()
                 logging.info('No refresh token found for service %s', provider['id'])
 
                 return render_template('logged-in.html', **template_values)
@@ -323,8 +324,7 @@ def login():
         # and they have no stored state on the server
         if statetoken.version == 2:
             authid = 'v2:' + statetoken.service + ':' + resp['refresh_token']
-            with dbclient.context():
-                dbmodel.update_fetch_token(statetoken.fetchtoken, authid)
+            dbmodel.update_fetch_token(statetoken.fetchtoken, authid)
 
             # Report results to the user
             template_values = {
@@ -335,8 +335,7 @@ def login():
                 'fetchtoken': statetoken.fetchtoken
             }
 
-            with dbclient.context():
-                statetoken.key.delete()
+            statetoken.key.delete()
             logging.info('Returned refresh token for service %s', provider['id'])
 
             return render_template('logged-in.html', **template_values)
@@ -347,8 +346,7 @@ def login():
         fetchtoken = statetoken.fetchtoken
 
         # If this was part of a polling request, signal completion
-        with dbclient.context():
-            dbmodel.update_fetch_token(fetchtoken, authid)
+        dbmodel.update_fetch_token(fetchtoken, authid)
 
         # Report results to the user
         template_values = {
@@ -359,8 +357,7 @@ def login():
             'fetchtoken': fetchtoken
         }
 
-        with dbclient.context():
-            statetoken.key.delete()
+        statetoken.key.delete()
         logging.info('Created new authid %s for service %s', keyid, provider['id'])
 
         return render_template('logged-in.html', **template_values)
@@ -447,11 +444,10 @@ def cli_token_login():
 
         keyid, authid = create_authtoken(id, resp)
 
-        with dbclient.context():
-            fetchtoken = dbmodel.create_fetch_token(resp['id_token'])
+        fetchtoken = dbmodel.create_fetch_token(resp['id_token'])
 
-            # If this was part of a polling request, signal completion
-            dbmodel.update_fetch_token(fetchtoken, authid)
+        # If this was part of a polling request, signal completion
+        dbmodel.update_fetch_token(fetchtoken, authid)
 
         # Report results to the user
         template_values = {
@@ -492,19 +488,18 @@ def fetch():
         if fetchtoken is None or fetchtoken == '':
             return jsonify({'error': 'Missing token'})
 
-        with dbclient.context():
-            entry = ndb.Key(dbmodel.FetchToken, fetchtoken).get()
-            if entry is None:
-                return jsonify({'error': 'No such entry'})
+        entry = ndb.Key(dbmodel.FetchToken, fetchtoken).get()
+        if entry is None:
+            return jsonify({'error': 'No such entry'})
 
-            if entry.expires < datetime.datetime.now(datetime.timezone.utc):
-                return jsonify({'error': 'No such entry'})
+        if entry.expires < datetime.datetime.now(datetime.timezone.utc):
+            return jsonify({'error': 'No such entry'})
 
-            if entry.authid is None or entry.authid == '':
-                return jsonify({'wait': 'Not ready'})
+        if entry.authid is None or entry.authid == '':
+            return jsonify({'wait': 'Not ready'})
 
-            entry.fetched = True
-            entry.put()
+        entry.fetched = True
+        entry.put()
 
         return jsonify({'authid': entry.authid})
     except:
@@ -524,8 +519,7 @@ def token_state():
         if fetchtoken is None or fetchtoken == '':
             return jsonify({'error': 'Missing token'})
 
-        with dbclient.context():
-            entry = ndb.Key(dbmodel.FetchToken, fetchtoken).get()
+        entry = ndb.Key(dbmodel.FetchToken, fetchtoken).get()
         if entry is None:
             return jsonify({'error': 'No such entry'})
 
@@ -624,84 +618,83 @@ def refresh_handler():
                 logging.info('Cached response to: %s is invalid because it expires in %s', keyid, exp_secs)
 
         # Find the entry
-        with dbclient.context():
-            entry = ndb.Key(dbmodel.AuthToken, keyid).get()
-            if entry is None:
-                response = jsonify({'error': 'No such key'})
-                response.headers['X-Reason'] = 'No such key'
-                response.status_code = 404
-                return response
+        entry = ndb.Key(dbmodel.AuthToken, keyid).get()
+        if entry is None:
+            response = jsonify({'error': 'No such key'})
+            response.headers['X-Reason'] = 'No such key'
+            response.status_code = 404
+            return response
 
-            servicetype = entry.service
+        servicetype = entry.service
 
-            # Decode
-            data = base64.b64decode(entry.blob)
-            resp = None
+        # Decode
+        data = base64.b64decode(entry.blob)
+        resp = None
 
-            # Decrypt
-            try:
-                resp = json.loads(simplecrypt.decrypt(password, data).decode('utf8'))
-            except:
-                logging.exception('decrypt error')
-                response = jsonify({'error': 'Invalid authid password'})
-                response.headers['X-Reason'] = 'Invalid authid password'
-                response.status_code = 400
-                return response
+        # Decrypt
+        try:
+            resp = json.loads(simplecrypt.decrypt(password, data).decode('utf8'))
+        except:
+            logging.exception('decrypt error')
+            response = jsonify({'error': 'Invalid authid password'})
+            response.headers['X-Reason'] = 'Invalid authid password'
+            response.status_code = 400
+            return response
 
-            service = find_service(entry.service)
+        service = find_service(entry.service)
 
-            # Issue a refresh request
-            url = service['auth-url']
-            request_params = {
-                'client_id': service['client-id'],
-                'grant_type': 'refresh_token',
-                'refresh_token': resp['refresh_token']
-            }
-            if "client-secret" in service:
-                request_params['client_secret'] = service['client-secret']
-            if "redirect-uri" in service:
-                request_params['redirect_uri'] = service['redirect-uri']
+        # Issue a refresh request
+        url = service['auth-url']
+        request_params = {
+            'client_id': service['client-id'],
+            'grant_type': 'refresh_token',
+            'refresh_token': resp['refresh_token']
+        }
+        if "client-secret" in service:
+            request_params['client_secret'] = service['client-secret']
+        if "redirect-uri" in service:
+            request_params['redirect_uri'] = service['redirect-uri']
 
-            # Some services do not allow the state to be passed
-            if 'no-redirect_uri-for-refresh-request' in service and service['no-redirect_uri-for-refresh-request']:
-                del request_params['redirect_uri']
+        # Some services do not allow the state to be passed
+        if 'no-redirect_uri-for-refresh-request' in service and service['no-redirect_uri-for-refresh-request']:
+            del request_params['redirect_uri']
 
-            # Jottacloud doesn't like the data to be urlencoded, so we send it as JSON.
-            #data = urllib.parse.urlencode(request_params)
-            #if settings.TESTING:
-            #    logging.info('REQ RAW: ' + str(data))
+        # Jottacloud doesn't like the data to be urlencoded, so we send it as JSON.
+        #data = urllib.parse.urlencode(request_params)
+        #if settings.TESTING:
+        #    logging.info('REQ RAW: ' + str(data))
 
-            try:
-                req = requests.post(url, data=request_params, timeout=20)
-                req.raise_for_status()
-                content = req.content
-            except requests.HTTPError as err:
-                logging.error(f'PROVIDER: {servicetype}, {url}')
-                logging.error(f'ERR-CODE: {err.response.status_code}')
-                logging.error(f'ERR-BODY: {err.response.text}')
-                raise err
+        try:
+            req = requests.post(url, data=request_params, timeout=20)
+            req.raise_for_status()
+            content = req.content
+        except requests.HTTPError as err:
+            logging.error(f'PROVIDER: {servicetype}, {url}')
+            logging.error(f'ERR-CODE: {err.response.status_code}')
+            logging.error(f'ERR-BODY: {err.response.text}')
+            raise err
 
-            # Store the old refresh_token as some servers do not send it again
-            rt = resp['refresh_token']
+        # Store the old refresh_token as some servers do not send it again
+        rt = resp['refresh_token']
 
-            # Read the server response
-            resp = json.loads(content)
-            exp_secs = int(resp["expires_in"])
+        # Read the server response
+        resp = json.loads(content)
+        exp_secs = int(resp["expires_in"])
 
-            # Set the refresh_token if it was missing
-            if 'refresh_token' not in resp:
-                resp['refresh_token'] = rt
+        # Set the refresh_token if it was missing
+        if 'refresh_token' not in resp:
+            resp['refresh_token'] = rt
 
-            # Encrypt the updated response
-            cipher = simplecrypt.encrypt(password, json.dumps(resp))
-            entry.expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=exp_secs)
-            entry.blob = base64.b64encode(cipher)
-            entry.put()
+        # Encrypt the updated response
+        cipher = simplecrypt.encrypt(password, json.dumps(resp))
+        entry.expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=exp_secs)
+        entry.blob = base64.b64encode(cipher)
+        entry.put()
 
-            cached_res = {'access_token': resp['access_token'], 'expires': entry.expires, 'type': servicetype}
+        cached_res = {'access_token': resp['access_token'], 'expires': entry.expires, 'type': servicetype}
 
-            memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
-            logging.info('Caching response to: %s for %s secs, service: %s', keyid, exp_secs - 10, servicetype)
+        memcache.set(key=cacheurl, value=cached_res, time=exp_secs - 10)
+        logging.info('Caching response to: %s for %s secs, service: %s', keyid, exp_secs - 10, servicetype)
 
         # Write the result back to the client
         return jsonify({
@@ -791,7 +784,7 @@ def refresh_handle_v2(inputfragment):
             req = requests.post(url, data=data, timeout=20)
             req.raise_for_status()
             content = req.content
-        except requests.HTTPError as err:            
+        except requests.HTTPError as err:
             logging.error(f'PROVIDER: {servicetype}, {url}')
             logging.error(f'ERR-CODE: {err.response.status_code}')
             logging.error(f'ERR-BODY: {err.response.text}')
@@ -863,8 +856,7 @@ def revoked_do_revoke():
         if keyid == 'v2':
             return 'Error: The token must be revoked from the service provider. You can de-authorize the application on the storage providers website.'
 
-        with dbclient.context():
-            entry = ndb.Key(dbmodel.AuthToken, keyid).get()
+        entry = ndb.Key(dbmodel.AuthToken, keyid).get()
         if entry is None:
             return 'Error: No such user'
 
@@ -877,8 +869,7 @@ def revoked_do_revoke():
             logging.exception('decrypt error')
             return 'Error: Invalid authid password'
 
-        with dbclient.context():
-            entry.key.delete()
+        entry.key.delete()
         return "Token revoked"
 
     except:
@@ -894,22 +885,21 @@ def cleanup():
     n_state = 0
     n_year = 0
 
-    with dbclient.context():
-        # Delete all expired fetch tokens
-        for n in dbmodel.FetchToken.query(dbmodel.FetchToken.expires < datetime.datetime.now(datetime.timezone.utc)):
-            n_fetch += 1
-            n.key.delete()
+    # Delete all expired fetch tokens
+    for n in dbmodel.FetchToken.query(dbmodel.FetchToken.expires < datetime.datetime.now(datetime.timezone.utc)):
+        n_fetch += 1
+        n.key.delete()
 
-        # Delete all expired state tokens
-        for n in dbmodel.StateToken.query(dbmodel.StateToken.expires < datetime.datetime.now(datetime.timezone.utc)):
-            n_state += 1
-            n.key.delete()
+    # Delete all expired state tokens
+    for n in dbmodel.StateToken.query(dbmodel.StateToken.expires < datetime.datetime.now(datetime.timezone.utc)):
+        n_state += 1
+        n.key.delete()
 
-        # Delete all tokens not having seen use in a year
-        one_year_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=365)
-        for n in dbmodel.AuthToken.query(dbmodel.AuthToken.expires < one_year_ago):
-            n_year += 1
-            n.key.delete()
+    # Delete all tokens not having seen use in a year
+    one_year_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=365)
+    for n in dbmodel.AuthToken.query(dbmodel.AuthToken.expires < one_year_ago):
+        n_year += 1
+        n.key.delete()
 
     return f'Cleanup done, removed {n_fetch} fetch tokens, {n_state} state tokens, and {n_year} auth tokens.'
 
@@ -955,8 +945,7 @@ def export():
             return response
 
         # Find the entry
-        with dbclient.context():
-            entry = ndb.Key(dbmodel.AuthToken, keyid).get()
+        entry = ndb.Key(dbmodel.AuthToken, keyid).get()
         if entry is None:
             response = jsonify({'error': 'No such key'})
             response.headers['X-Reason'] = 'No such key'
@@ -1030,8 +1019,7 @@ def import_handler():
             return response
 
         # Find the entry
-        with dbclient.context():
-            entry = ndb.Key(dbmodel.AuthToken, keyid).get()
+        entry = ndb.Key(dbmodel.AuthToken, keyid).get()
         if entry is None:
             response = jsonify({'error': 'No such key'})
             response.headers['X-Reason'] = 'No such key'
