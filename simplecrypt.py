@@ -129,8 +129,9 @@ def _expand_keys(password, salt):
     if not password: raise ValueError('Missing password.')
     key_len = AES_KEY_LEN // 8
     # the form of the prf below is taken from the code for PBKDF2
-    keys = PBKDF2(_str_to_bytes(password), salt, dkLen=2 * key_len,
-                  count=EXPANSION_COUNT, prf=lambda p, s: HMAC.new(p, s, HASH).digest())
+    strbyt = _str_to_bytes(password)
+    keys = PBKDF2(strbyt, salt, dkLen=2 * key_len,
+                  count=EXPANSION_COUNT, hmac_hash_module=HASH)
     return keys[:key_len], keys[key_len:]
 
 
