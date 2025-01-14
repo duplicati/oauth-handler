@@ -273,7 +273,12 @@ def login():
             logging.error(f'PROVIDER: {display}, {url}')
             logging.error(f'ERR-CODE: {err.response.status_code}')
             logging.error(f'ERR-BODY: {err.response.text}')
-            raise err
+            if 'secret' in err.response.text.lower() or service['client-secret'] in err.response.text:
+                raise err
+            err_response = jsonify({'error': f'Request error: {err.response.text} (code: {err.response.status_code})'})
+            err_response.headers['X-Reason'] = err.response.text
+            err_response.status_code = 500
+            return err_response
 
         if settings.TESTING:
             logging.info(f'RESP RAW: {content}')
@@ -672,7 +677,12 @@ def refresh_handler():
             logging.error(f'PROVIDER: {servicetype}, {url}')
             logging.error(f'ERR-CODE: {err.response.status_code}')
             logging.error(f'ERR-BODY: {err.response.text}')
-            raise err
+            if 'secret' in err.response.text.lower() or service['client-secret'] in err.response.text:
+                raise err
+            err_response = jsonify({'error': f'Request error: {err.response.text} (code: {err.response.status_code})'})
+            err_response.headers['X-Reason'] = err.response.text
+            err_response.status_code = 500
+            return err_response
 
         # Store the old refresh_token as some servers do not send it again
         rt = resp['refresh_token']
@@ -788,7 +798,12 @@ def refresh_handle_v2(inputfragment):
             logging.error(f'PROVIDER: {servicetype}, {url}')
             logging.error(f'ERR-CODE: {err.response.status_code}')
             logging.error(f'ERR-BODY: {err.response.text}')
-            raise err
+            if 'secret' in err.response.text.lower() or service['client-secret'] in err.response.text:
+                raise err
+            err_response = jsonify({'error': f'Request error: {err.response.text} (code: {err.response.status_code})'})
+            err_response.headers['X-Reason'] = err.response.text
+            err_response.status_code = 500
+            return err_response
 
         resp = json.loads(content)
         exp_secs = int(resp["expires_in"])
