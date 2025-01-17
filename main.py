@@ -276,7 +276,7 @@ def login():
             if 'secret' in err.response.text.lower() or service['client-secret'] in err.response.text:
                 raise err
             err_response = jsonify({'error': f'Request error: {err.response.text} (code: {err.response.status_code})'})
-            err_response.headers['X-Reason'] = f'Authentication provider for {display} gave error: {err.response.text}'
+            err_response.headers['X-Reason'] = f'Authentication provider for {display} gave error: {err.response.text.replace('\n', '').replace('\r', '')}'
             err_response.status_code = 500
             return err_response
 
@@ -680,7 +680,7 @@ def refresh_handler():
             if 'secret' in err.response.text.lower() or service['client-secret'] in err.response.text:
                 raise err
             err_response = jsonify({'error': f'Request error: {err.response.text} (code: {err.response.status_code})'})
-            err_response.headers['X-Reason'] = f'Authentication provider for {servicetype} gave error: {err.response.text}'
+            err_response.headers['X-Reason'] = f'Authentication provider for {servicetype} gave error: {err.response.text.replace('\n', '').replace('\r', '')}'
             err_response.status_code = 500
             return err_response
 
@@ -801,7 +801,7 @@ def refresh_handle_v2(inputfragment):
             if 'secret' in err.response.text.lower() or service['client-secret'] in err.response.text:
                 raise err
             err_response = jsonify({'error': f'Request error: {err.response.text} (code: {err.response.status_code})'})
-            err_response.headers['X-Reason'] = f'Authentication provider for {servicetype} gave error: {err.response.text}'
+            err_response.headers['X-Reason'] = f'Authentication provider for {servicetype} gave error: {err.response.text.replace('\n', '').replace('\r', '')}'
             err_response.status_code = 500
             return err_response
 
