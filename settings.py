@@ -249,16 +249,18 @@ SERVICES = [
         'deauthlink': 'https://security.google.com/settings/security/permissions',
         'brandimage': '/google-btn.png'
     },
-    # {
-    #     'display': 'Google Drive (full access)',
-    #     'type': 'gd',
-    #     'id': 'googledocs',
-    #     'scope': 'https://www.googleapis.com/auth/drive',
-    #     'extraurl': 'access_type=offline&approval_prompt=force',
-    #     'servicelink': 'https://drive.google.com',
-    #     'deauthlink': 'https://security.google.com/settings/security/permissions',
-    #     'brandimage': '/google-btn.png'
-    # },
+    {
+
+        'display': 'Google Drive (full access)',
+        'type': 'gd',
+        'id': 'googledocs',
+        'scope': 'https://www.googleapis.com/auth/drive',
+        'extraurl': 'access_type=offline&approval_prompt=force',
+        'servicelink': 'https://drive.google.com',
+        'deauthlink': 'https://security.google.com/settings/security/permissions',
+        'brandimage': '/google-btn.png',
+        'hidden': True
+    },
     {
         'display': 'Google Cloud Storage',
         'type': 'gd',
@@ -297,6 +299,14 @@ SERVICES = [
         'id': 'msgroup',
         'scope': 'offline_access Files.ReadWrite.All Group.Read.All',
         'servicelink': 'https://support.office.com/en-us/article/Learn-about-Office-365-groups-b565caa1-5c40-40ef-9915-60fdb2d97fa2'
+    },
+    {
+        'display': 'HubiC',
+        'type': 'hc',
+        'id': 'hubic',
+        'scope': 'credentials.r',
+        'servicelink': 'https://hubic.com',
+        'hidden': True
     },
     {
         'display': 'Box.com',
