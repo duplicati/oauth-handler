@@ -249,16 +249,16 @@ SERVICES = [
         'deauthlink': 'https://security.google.com/settings/security/permissions',
         'brandimage': '/google-btn.png'
     },
-    {
-        'display': 'Google Drive (full access)',
-        'type': 'gd',
-        'id': 'googledocs',
-        'scope': 'https://www.googleapis.com/auth/drive',
-        'extraurl': 'access_type=offline&approval_prompt=force',
-        'servicelink': 'https://drive.google.com',
-        'deauthlink': 'https://security.google.com/settings/security/permissions',
-        'brandimage': '/google-btn.png'
-    },
+    # {
+    #     'display': 'Google Drive (full access)',
+    #     'type': 'gd',
+    #     'id': 'googledocs',
+    #     'scope': 'https://www.googleapis.com/auth/drive',
+    #     'extraurl': 'access_type=offline&approval_prompt=force',
+    #     'servicelink': 'https://drive.google.com',
+    #     'deauthlink': 'https://security.google.com/settings/security/permissions',
+    #     'brandimage': '/google-btn.png'
+    # },
     {
         'display': 'Google Cloud Storage',
         'type': 'gd',
