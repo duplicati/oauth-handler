@@ -299,20 +299,6 @@ SERVICES = [
         'servicelink': 'https://support.office.com/en-us/article/Learn-about-Office-365-groups-b565caa1-5c40-40ef-9915-60fdb2d97fa2'
     },
     {
-        'display': 'HubiC',
-        'type': 'hc',
-        'id': 'hubic',
-        'scope': 'credentials.r',
-        'servicelink': 'https://hubic.com'
-    },
-    {
-        'display': 'Amazon Cloud Drive',
-        'type': 'amz',
-        'id': 'amzcd',
-        'scope': 'clouddrive:read_other clouddrive:write',
-        'servicelink': 'https://www.amazon.com/clouddrive/home'
-    },
-    {
         'display': 'Box.com',
         'type': 'box',
         'id': 'box.com',
