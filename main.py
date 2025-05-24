@@ -677,7 +677,7 @@ def refresh_handler():
             logging.error(f'PROVIDER: {servicetype}, {url}')
             logging.error(f'ERR-CODE: {err.response.status_code}')
             logging.error(f'ERR-BODY: {err.response.text}')
-            if 'secret' in err.response.text.lower() or service['client-secret'] in err.response.text:
+            if 'secret' in err.response.text.lower() or (('client-secret' in service) and (service['client-secret'] in err.response.text)):
                 raise err
             err_response = jsonify({'error': f'Request error: {err.response.text} (code: {err.response.status_code})'})
             err_response.headers['X-Reason'] = f'Authentication provider for {servicetype} gave error: {err.response.text.replace('\n', '').replace('\r', '')}'
