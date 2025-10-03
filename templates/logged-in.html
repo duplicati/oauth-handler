@@ -53,9 +53,9 @@
         };
 
         setTimeout(recheck, 3000);
-        if (window.opener && !window.opener.closed)
-          window.opener.postMessage('authid:{{authid}}', '*');
 
+        if (window.parent && !window.parent.closed)
+            window.parent.postMessage('authid:{{authid}}', '*');
       });
     </script>
 
