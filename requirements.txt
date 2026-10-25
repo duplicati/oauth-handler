@@ -1,7 +1,7 @@
-django==5.2.16
+django==5.2.17
 appengine-python-standard==1.1.9
 pycryptodome==3.21.0
 Jinja2==3.1.6
-Flask==3.1.1
+Flask==3.1.3
 google-cloud-ndb==2.3.2
 google-cloud-logging==3.11.3
